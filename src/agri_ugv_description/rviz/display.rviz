@@ -81,6 +81,66 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
+        front_left_leg_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        front_left_steer_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        front_left_wheel_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        front_right_leg_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        front_right_steer_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        front_right_wheel_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        rear_left_leg_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        rear_left_steer_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        rear_left_wheel_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        rear_right_leg_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        rear_right_steer_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        rear_right_wheel_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
       Mass Properties:
         Inertia: false
         Mass: false
@@ -100,6 +160,30 @@ Visualization Manager:
           Value: true
         enclosure:
           Value: true
+        front_left_leg_link:
+          Value: true
+        front_left_steer_link:
+          Value: true
+        front_left_wheel_link:
+          Value: true
+        front_right_leg_link:
+          Value: true
+        front_right_steer_link:
+          Value: true
+        front_right_wheel_link:
+          Value: true
+        rear_left_leg_link:
+          Value: true
+        rear_left_steer_link:
+          Value: true
+        rear_left_wheel_link:
+          Value: true
+        rear_right_leg_link:
+          Value: true
+        rear_right_steer_link:
+          Value: true
+        rear_right_wheel_link:
+          Value: true
       Marker Scale: 1
       Name: TF
       Show Arrows: true
@@ -110,6 +194,22 @@ Visualization Manager:
           base_link:
             enclosure:
               {}
+            front_left_steer_link:
+              front_left_leg_link:
+                front_left_wheel_link:
+                  {}
+            front_right_steer_link:
+              front_right_leg_link:
+                front_right_wheel_link:
+                  {}
+            rear_left_steer_link:
+              rear_left_leg_link:
+                rear_left_wheel_link:
+                  {}
+            rear_right_steer_link:
+              rear_right_leg_link:
+                rear_right_wheel_link:
+                  {}
       Update Interval: 0
       Value: true
   Enabled: true
@@ -165,18 +265,18 @@ Visualization Manager:
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 1.0228339433670044
-        Y: -1.7399804592132568
-        Z: 0.5070986747741699
-      Focal Shape Fixed Size: true
+        X: 0
+        Y: 0
+        Z: 0
+      Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.785398006439209
+      Pitch: 0.7853981852531433
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 0.785398006439209
+      Yaw: 0.7853981852531433
     Saved: ~
 Window Geometry:
   Displays:
@@ -195,4 +295,4 @@ Window Geometry:
     collapsed: false
   Width: 1200
   X: 321
-  Y: 477
+  Y: 197

@@ -10,13 +10,26 @@
   <xacro:property name="box_bottom_z"    value="0.45"/>   <!-- above ground -->
   <xacro:property name="box_top_z"       value="1.85"/>   <!-- above ground -->
   <xacro:property name="panel_thickness" value="0.02"/>
+  <xacro:property name="steer_z"         value="0.70"/>   <!-- steering motor height above ground (estimated) -->
+  <xacro:property name="susp_travel"     value="0.05"/>   <!-- +/- 5 cm, 0.10 m total (assumed) -->
+  <xacro:property name="steer_limit"     value="${pi/2}"/> <!-- +/- 90 degrees -->
 
   <!-- Derived values: computed, never typed twice -->
   <xacro:property name="box_height" value="${box_top_z - box_bottom_z}"/>
+  <xacro:property name="leg_length" value="${steer_z - wheel_radius}"/>
 
   <!-- ============ Colours for RViz ============ -->
   <material name="aluminium">
     <color rgba="0.75 0.75 0.78 1.0"/>
+  </material>
+  <material name="module_white">
+    <color rgba="0.95 0.95 0.95 1.0"/>
+  </material>
+  <material name="rubber">
+    <color rgba="0.15 0.15 0.15 1.0"/>
+  </material>
+  <material name="rim_red">
+    <color rgba="0.80 0.10 0.10 1.0"/>
   </material>
 
   <!-- ============ Reference points ============ -->
@@ -68,5 +81,85 @@
     <!-- base_link is at wheel-axle height, so subtract it -->
     <origin xyz="0 0 ${box_bottom_z - wheel_radius}" rpy="0 0 0"/>
   </joint>
+
+  <!-- ============ Wheel module: one corner ============ -->
+  <!-- prefix: module name, e.g. front_left
+       x_sign: +1 = front, -1 = rear
+       y_sign: +1 = left,  -1 = right -->
+  <xacro:macro name="wheel_module" params="prefix x_sign y_sign">
+
+    <!-- 1. Steering motor: turns everything below it around a vertical axis -->
+    <link name="${prefix}_steer_link">
+      <visual>
+        <geometry>
+          <box size="0.20 0.20 0.20"/>
+        </geometry>
+        <material name="module_white"/>
+      </visual>
+    </link>
+
+    <joint name="${prefix}_steer_joint" type="revolute">
+      <parent link="base_link"/>
+      <child link="${prefix}_steer_link"/>
+      <origin xyz="${x_sign*wheelbase/2} ${y_sign*track/2} ${steer_z - wheel_radius}" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="${-steer_limit}" upper="${steer_limit}" effort="100" velocity="1.0"/>
+    </joint>
+
+    <!-- 2. Leg with suspension: slides up and down.
+         The leg is drawn beside the wheel, on the inner side. -->
+    <link name="${prefix}_leg_link">
+      <visual>
+        <origin xyz="0 ${-y_sign*(wheel_width/2 + 0.05)} ${-leg_length/2}" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.10 0.06 ${leg_length}"/>
+        </geometry>
+        <material name="module_white"/>
+      </visual>
+    </link>
+
+    <joint name="${prefix}_suspension_joint" type="prismatic">
+      <parent link="${prefix}_steer_link"/>
+      <child link="${prefix}_leg_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="${-susp_travel}" upper="${susp_travel}" effort="1000" velocity="0.5"/>
+    </joint>
+
+    <!-- 3. Wheel: spins around its axle (the y axis) -->
+    <link name="${prefix}_wheel_link">
+      <!-- Tyre. Cylinders stand upright by default, so roll 90 deg to lay the axle along y -->
+      <visual>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+        <material name="rubber"/>
+      </visual>
+      <!-- Rim -->
+      <visual>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_radius*0.5}" length="${wheel_width + 0.01}"/>
+        </geometry>
+        <material name="rim_red"/>
+      </visual>
+    </link>
+
+    <joint name="${prefix}_wheel_joint" type="continuous">
+      <parent link="${prefix}_leg_link"/>
+      <child link="${prefix}_wheel_link"/>
+      <!-- Wheel centre sits leg_length below the steering motor: exactly at axle height -->
+      <origin xyz="0 0 ${-leg_length}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+    </joint>
+
+  </xacro:macro>
+
+  <!-- ============ The four corners ============ -->
+  <xacro:wheel_module prefix="front_left"  x_sign="1"  y_sign="1"/>
+  <xacro:wheel_module prefix="front_right" x_sign="1"  y_sign="-1"/>
+  <xacro:wheel_module prefix="rear_left"   x_sign="-1" y_sign="1"/>
+  <xacro:wheel_module prefix="rear_right"  x_sign="-1" y_sign="-1"/>
 
 </robot>
