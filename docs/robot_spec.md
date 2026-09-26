@@ -1,0 +1,40 @@
+# Robot specification
+
+The robot is modelled on the Thorvald II-based phenotyping robot used at the
+University of Bonn [1, 2]. Every value is marked as published, estimated from
+photos, or an engineering assumption.
+
+| Property | Value | Basis |
+|---|---|---|
+| Track (wheel centres, left-right) | 1.50 m | Published [1] |
+| Wheelbase (steering axes, front-rear) | 1.35 m | Published, standard Thorvald II [1] |
+| Sensor enclosure footprint | 1.50 x 1.50 m | Published [2] |
+| Enclosure vertical extent | 0.45 m to 1.85 m above ground | Estimated from photo |
+| Overall height | ~2.0 m | Published [2] |
+| Wheel | diameter 0.41 m, width 0.165 m (16x6.50-8 tyre) | Estimated from photo |
+| Suspension | passive, 0.10 m travel | Type published [1]; travel assumed |
+| Base platform mass | 180 kg | Assumed; published as under 200 kg [3] |
+| Enclosure, sensors, computers | 100 kg | Assumed |
+| Total mass | 280 kg | Sum |
+| Line scanners | 1.2 m high, 1.4 m apart, pointing down | Published [2] |
+| GNSS antennas | front and rear on the roof (dual-antenna heading) | Published [2]; positions from photo |
+| IMU | under the roof, rear | Published [2] |
+
+## Mass distribution (assumed)
+
+| Part | Mass | Centre-of-mass height |
+|---|---|---|
+| 4 wheel modules | 4 x 20 kg | 0.35 m |
+| Frame and batteries | 100 kg | 0.80 m |
+| Enclosure and equipment | 100 kg | 1.40 m |
+
+Resulting centre of mass: about 0.89 m above ground.
+Static tip-over angle: about 40 deg sideways, about 37 deg forward/backward.
+
+## References
+
+1. L. Grimstad and P. J. From, "The Thorvald II Agricultural Robotic System",
+   Robotics 6(4), 24, 2017.
+2. F. Esser et al., "Field Robot for High-throughput and High-resolution 3D
+   Plant Phenotyping", arXiv:2310.11516, 2023.
+3. DEVELOP3D, "Saga Robotics: Fields of the future".
