@@ -13,3 +13,4 @@ __pycache__/
 
 # Experiment recordings (large; results are summarised elsewhere)
 runs/
+.pytest_cache/
