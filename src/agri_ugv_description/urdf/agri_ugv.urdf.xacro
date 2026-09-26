@@ -1,0 +1,72 @@
+<?xml version="1.0"?>
+<robot name="agri_ugv" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ============ Dimensions (sources: docs/robot_spec.md) ============ -->
+  <xacro:property name="track"           value="1.50"/>   <!-- left-right wheel spacing -->
+  <xacro:property name="wheelbase"       value="1.35"/>   <!-- front-rear steering axes -->
+  <xacro:property name="wheel_radius"    value="0.205"/>
+  <xacro:property name="wheel_width"     value="0.165"/>
+  <xacro:property name="box_size"        value="1.50"/>   <!-- enclosure footprint -->
+  <xacro:property name="box_bottom_z"    value="0.45"/>   <!-- above ground -->
+  <xacro:property name="box_top_z"       value="1.85"/>   <!-- above ground -->
+  <xacro:property name="panel_thickness" value="0.02"/>
+
+  <!-- Derived values: computed, never typed twice -->
+  <xacro:property name="box_height" value="${box_top_z - box_bottom_z}"/>
+
+  <!-- ============ Colours for RViz ============ -->
+  <material name="aluminium">
+    <color rgba="0.75 0.75 0.78 1.0"/>
+  </material>
+
+  <!-- ============ Reference points ============ -->
+  <!-- base_footprint: on the ground, below the robot's centre -->
+  <link name="base_footprint"/>
+
+  <!-- base_link: the robot's main reference point, at wheel-axle height -->
+  <link name="base_link"/>
+
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${wheel_radius}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ============ Sensor enclosure ============ -->
+  <!-- Roof plus left and right side panels. Front, rear and bottom are open,
+       so plants pass through the robot. Link origin: centre of the bottom edge. -->
+  <link name="enclosure">
+    <!-- Roof -->
+    <visual>
+      <origin xyz="0 0 ${box_height - panel_thickness/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${box_size} ${box_size} ${panel_thickness}"/>
+      </geometry>
+      <material name="aluminium"/>
+    </visual>
+    <!-- Left side panel (+y) -->
+    <visual>
+      <origin xyz="0 ${box_size/2 - panel_thickness/2} ${box_height/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${box_size} ${panel_thickness} ${box_height}"/>
+      </geometry>
+      <material name="aluminium"/>
+    </visual>
+    <!-- Right side panel (-y) -->
+    <visual>
+      <origin xyz="0 ${-(box_size/2 - panel_thickness/2)} ${box_height/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${box_size} ${panel_thickness} ${box_height}"/>
+      </geometry>
+      <material name="aluminium"/>
+    </visual>
+  </link>
+
+  <joint name="enclosure_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="enclosure"/>
+    <!-- base_link is at wheel-axle height, so subtract it -->
+    <origin xyz="0 0 ${box_bottom_z - wheel_radius}" rpy="0 0 0"/>
+  </joint>
+
+</robot>
