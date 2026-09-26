@@ -1,0 +1,15 @@
+# colcon build output (regenerated on every build)
+build/
+install/
+log/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Editor settings
+.vscode/
+.idea/
+
+# Experiment recordings (large; results are summarised elsewhere)
+runs/
