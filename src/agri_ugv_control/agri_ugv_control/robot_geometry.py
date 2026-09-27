@@ -1,4 +1,5 @@
-"""Read the wheel-module geometry from the robot description (URDF text).
+"""
+Read the wheel-module geometry from the robot description (URDF text).
 
 The robot model is the single source of truth for the geometry: this module
 extracts the numbers from it, so they are never typed into the code.
@@ -13,7 +14,8 @@ MODULE_NAMES = ('front_left', 'front_right', 'rear_left', 'rear_right')
 
 
 def geometry_from_urdf(urdf_text: str) -> Tuple[List[WheelModule], float]:
-    """Return the four wheel modules and the wheel radius described in a URDF.
+    """
+    Return the four wheel modules and the wheel radius described in a URDF.
 
     Wheel positions come from the <origin> of each <name>_steer_joint, which
     must be attached to base_link. The wheel radius comes from the first

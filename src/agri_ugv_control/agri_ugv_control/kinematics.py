@@ -1,4 +1,5 @@
-"""Four-wheel-steering kinematics: pure math, no ROS.
+"""
+Four-wheel-steering kinematics: pure math, no ROS.
 
 Conventions (ROS REP 103): x forward, y left, z up.
 Angles in radians, counter-clockwise positive.
@@ -29,7 +30,8 @@ class WheelCommand:
 def inverse_kinematics(vx: float, vy: float, wz: float,
                        modules: List[WheelModule],
                        wheel_radius: float) -> List[WheelCommand]:
-    """Convert a robot velocity into a steering angle and spin speed per wheel.
+    """
+    Convert a robot velocity into a steering angle and spin speed per wheel.
 
     vx, vy: robot velocity forward and to the left [m/s]
     wz:     robot turn rate, counter-clockwise [rad/s]
