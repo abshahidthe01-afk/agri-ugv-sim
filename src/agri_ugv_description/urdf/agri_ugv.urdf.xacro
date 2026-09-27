@@ -1,6 +1,8 @@
 <?xml version="1.0"?>
 <robot name="agri_ugv" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
+  <xacro:include filename="inertial_macros.xacro"/>
+
   <!-- ============ Dimensions (sources: docs/robot_spec.md) ============ -->
   <xacro:property name="track"           value="1.50"/>   <!-- left-right wheel spacing -->
   <xacro:property name="wheelbase"       value="1.35"/>   <!-- front-rear steering axes -->
@@ -13,6 +15,15 @@
   <xacro:property name="steer_z"         value="0.70"/>   <!-- steering motor height above ground (estimated) -->
   <xacro:property name="susp_travel"     value="0.05"/>   <!-- +/- 5 cm, 0.10 m total (assumed) -->
   <xacro:property name="steer_limit"     value="${pi/2}"/> <!-- +/- 90 degrees -->
+
+  <!-- ============ Masses (assumed; see docs/robot_spec.md) ============ -->
+  <xacro:property name="enclosure_mass"  value="100.0"/>  <!-- enclosure, sensors, computers -->
+  <xacro:property name="enclosure_com_z" value="1.40"/>   <!-- above ground -->
+  <xacro:property name="chassis_mass"    value="100.0"/>  <!-- frame and batteries -->
+  <xacro:property name="chassis_com_z"   value="0.80"/>   <!-- above ground -->
+  <xacro:property name="steer_mass"      value="4.0"/>    <!-- per module: steering motor -->
+  <xacro:property name="leg_mass"        value="6.0"/>    <!-- per module: leg, suspension, drive motor -->
+  <xacro:property name="wheel_mass"      value="10.0"/>   <!-- per module: wheel and tyre -->
 
   <!-- Derived values: computed, never typed twice -->
   <xacro:property name="box_height" value="${box_top_z - box_bottom_z}"/>
@@ -45,6 +56,17 @@
     <origin xyz="0 0 ${wheel_radius}" rpy="0 0 0"/>
   </joint>
 
+  <!-- ============ Chassis: frame and batteries (mass only, no visual) ============ -->
+  <link name="chassis">
+    <xacro:box_inertial mass="${chassis_mass}" x="${box_size}" y="${box_size}" z="0.20"/>
+  </link>
+
+  <joint name="chassis_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="chassis"/>
+    <origin xyz="0 0 ${chassis_com_z - wheel_radius}" rpy="0 0 0"/>
+  </joint>
+
   <!-- ============ Sensor enclosure ============ -->
   <!-- Roof plus left and right side panels. Front, rear and bottom are open,
        so plants pass through the robot. Link origin: centre of the bottom edge. -->
@@ -57,6 +79,12 @@
       </geometry>
       <material name="aluminium"/>
     </visual>
+    <collision>
+      <origin xyz="0 0 ${box_height - panel_thickness/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${box_size} ${box_size} ${panel_thickness}"/>
+      </geometry>
+    </collision>
     <!-- Left side panel (+y) -->
     <visual>
       <origin xyz="0 ${box_size/2 - panel_thickness/2} ${box_height/2}" rpy="0 0 0"/>
@@ -65,6 +93,12 @@
       </geometry>
       <material name="aluminium"/>
     </visual>
+    <collision>
+      <origin xyz="0 ${box_size/2 - panel_thickness/2} ${box_height/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${box_size} ${panel_thickness} ${box_height}"/>
+      </geometry>
+    </collision>
     <!-- Right side panel (-y) -->
     <visual>
       <origin xyz="0 ${-(box_size/2 - panel_thickness/2)} ${box_height/2}" rpy="0 0 0"/>
@@ -73,6 +107,15 @@
       </geometry>
       <material name="aluminium"/>
     </visual>
+    <collision>
+      <origin xyz="0 ${-(box_size/2 - panel_thickness/2)} ${box_height/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${box_size} ${panel_thickness} ${box_height}"/>
+      </geometry>
+    </collision>
+    <!-- Mass of the enclosure plus everything mounted in it -->
+    <xacro:box_inertial mass="${enclosure_mass}" x="${box_size}" y="${box_size}" z="${box_height}"
+                        xyz="0 0 ${enclosure_com_z - box_bottom_z}"/>
   </link>
 
   <joint name="enclosure_joint" type="fixed">
@@ -96,6 +139,7 @@
         </geometry>
         <material name="module_white"/>
       </visual>
+      <xacro:box_inertial mass="${steer_mass}" x="0.20" y="0.20" z="0.20"/>
     </link>
 
     <joint name="${prefix}_steer_joint" type="revolute">
@@ -116,6 +160,8 @@
         </geometry>
         <material name="module_white"/>
       </visual>
+      <xacro:box_inertial mass="${leg_mass}" x="0.10" y="0.06" z="${leg_length}"
+                          xyz="0 ${-y_sign*(wheel_width/2 + 0.05)} ${-leg_length/2}"/>
     </link>
 
     <joint name="${prefix}_suspension_joint" type="prismatic">
@@ -144,6 +190,15 @@
         </geometry>
         <material name="rim_red"/>
       </visual>
+      <!-- The part that touches the ground -->
+      <collision>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+      </collision>
+      <xacro:cylinder_inertial mass="${wheel_mass}" radius="${wheel_radius}" length="${wheel_width}"
+                               rpy="${pi/2} 0 0"/>
     </link>
 
     <joint name="${prefix}_wheel_joint" type="continuous">

@@ -24,11 +24,11 @@ photos, or an engineering assumption.
 
 | Part | Mass | Centre-of-mass height |
 |---|---|---|
-| 4 wheel modules | 4 x 20 kg | 0.35 m |
+| 4 wheel modules (motor 4 kg, leg 6 kg, wheel 10 kg) | 4 x 20 kg | 0.38 m |
 | Frame and batteries | 100 kg | 0.80 m |
 | Enclosure and equipment | 100 kg | 1.40 m |
 
-Resulting centre of mass: about 0.89 m above ground.
+Resulting centre of mass: 0.894 m above ground (computed from the robot model, checked by a unit test).
 Static tip-over angle: about 40 deg sideways, about 37 deg forward/backward.
 
 ## References

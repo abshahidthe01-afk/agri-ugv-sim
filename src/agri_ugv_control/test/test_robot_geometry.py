@@ -1,8 +1,9 @@
-"""Tests for reading the geometry from the robot model."""
+"""Tests for reading the geometry and the mass properties from the robot model."""
 
+import math
 from pathlib import Path
 
-from agri_ugv_control.robot_geometry import geometry_from_urdf
+from agri_ugv_control.robot_geometry import center_of_mass, geometry_from_urdf
 import pytest
 import xacro
 
@@ -31,3 +32,25 @@ def test_missing_joint_is_reported():
     """A model without the expected joints gives a clear error, not a silent wrong answer."""
     with pytest.raises(ValueError, match='front_left_steer_joint'):
         geometry_from_urdf('<robot name="empty"><link name="base_link"/></robot>')
+
+
+def test_mass_and_centre_of_mass_match_the_spec():
+    """Total mass is 280 kg; the centre of mass is centred and 0.894 m above the ground."""
+    total_mass, (x, y, z) = center_of_mass(load_real_model())
+    assert total_mass == pytest.approx(280.0)
+    assert x == pytest.approx(0.0, abs=1e-9)
+    assert y == pytest.approx(0.0, abs=1e-9)
+    assert z == pytest.approx(0.894, abs=0.001)
+
+
+def test_robot_is_hard_to_tip_over():
+    """The static tip-over angle is far above field slopes, sideways and forwards."""
+    urdf = load_real_model()
+    modules, _ = geometry_from_urdf(urdf)
+    _, (_, _, com_height) = center_of_mass(urdf)
+    half_track = max(abs(m.y) for m in modules)
+    half_wheelbase = max(abs(m.x) for m in modules)
+    sideways = math.degrees(math.atan2(half_track, com_height))
+    forwards = math.degrees(math.atan2(half_wheelbase, com_height))
+    assert sideways > 35.0
+    assert forwards > 35.0

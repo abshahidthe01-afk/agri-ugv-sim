@@ -48,3 +48,53 @@ def geometry_from_urdf(urdf_text: str) -> Tuple[List[WheelModule], float]:
     if max(radii) - min(radii) > 1e-9:
         raise ValueError(f'wheel radii differ between modules: {radii}')
     return modules, radii[0]
+
+
+def _xyz(element, attribute):
+    """Read an 'x y z' attribute as three floats; a missing one means zeros."""
+    if element is None or element.get(attribute) is None:
+        return (0.0, 0.0, 0.0)
+    x, y, z = (float(value) for value in element.get(attribute).split())
+    return (x, y, z)
+
+
+def center_of_mass(urdf_text: str) -> Tuple[float, Tuple[float, float, float]]:
+    """
+    Return the total mass [kg] and the centre of mass (x, y, z) [m] of a URDF.
+
+    The centre of mass is relative to the root link, with all joints at zero.
+    Only valid when no joint origin rotates its child link (true for this
+    robot); otherwise a ValueError is raised instead of a wrong answer.
+    """
+    robot = ElementTree.fromstring(urdf_text)
+
+    # For every child link: its parent link, and its offset from that parent
+    parent_of = {}
+    for joint in robot.findall('joint'):
+        origin = joint.find('origin')
+        if any(abs(angle) > 1e-9 for angle in _xyz(origin, 'rpy')):
+            raise ValueError(f'joint {joint.get("name")} rotates its child link')
+        parent_of[joint.find('child').get('link')] = (
+            joint.find('parent').get('link'), _xyz(origin, 'xyz'))
+
+    def position(link_name):
+        """Add up the offsets from the root link down to this link."""
+        if link_name not in parent_of:
+            return (0.0, 0.0, 0.0)
+        parent, offset = parent_of[link_name]
+        return tuple(p + o for p, o in zip(position(parent), offset))
+
+    total_mass = 0.0
+    weighted = [0.0, 0.0, 0.0]
+    for link in robot.findall('link'):
+        inertial = link.find('inertial')
+        if inertial is None:
+            continue   # a link without mass, such as base_footprint
+        mass = float(inertial.find('mass').get('value'))
+        link_position = position(link.get('name'))
+        com_in_link = _xyz(inertial.find('origin'), 'xyz')
+        total_mass += mass
+        for i in range(3):
+            weighted[i] += mass * (link_position[i] + com_in_link[i])
+    com = (weighted[0] / total_mass, weighted[1] / total_mass, weighted[2] / total_mass)
+    return total_mass, com
