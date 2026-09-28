@@ -25,6 +25,14 @@
   <xacro:property name="leg_mass"        value="6.0"/>    <!-- per module: leg, suspension, drive motor -->
   <xacro:property name="wheel_mass"      value="10.0"/>   <!-- per module: wheel and tyre -->
 
+  <!-- ============ Suspension: passive spring and damper per wheel ============ -->
+  <!-- Stiffness is chosen so the robot rests at mid-travel: each spring carries its
+       share of the sprung weight when compressed susp_travel from full extension. -->
+  <xacro:property name="gravity"               value="9.81"/>
+  <xacro:property name="susp_damping_ratio"    value="0.4"/>   <!-- assumed; 0.3-0.5 is typical -->
+  <xacro:property name="sprung_mass_per_wheel" value="${(enclosure_mass + chassis_mass + 4*steer_mass) / 4}"/>
+  <xacro:property name="susp_stiffness"        value="${sprung_mass_per_wheel * gravity / susp_travel}"/>
+  <xacro:property name="susp_damping"          value="${2 * susp_damping_ratio * sqrt(susp_stiffness * sprung_mass_per_wheel)}"/>
   <!-- Derived values: computed, never typed twice -->
   <xacro:property name="box_height" value="${box_top_z - box_bottom_z}"/>
   <xacro:property name="leg_length" value="${steer_z - wheel_radius}"/>
@@ -170,7 +178,14 @@
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <axis xyz="0 0 1"/>
       <limit lower="${-susp_travel}" upper="${susp_travel}" effort="1000" velocity="0.5"/>
+      <dynamics damping="${susp_damping}" friction="0.0"/>
     </joint>
+
+    <!-- Spring: pushes the leg down, with zero force at full extension -->
+    <gazebo reference="${prefix}_suspension_joint">
+      <springReference>${-susp_travel}</springReference>
+      <springStiffness>${susp_stiffness}</springStiffness>
+    </gazebo>
 
     <!-- 3. Wheel: spins around its axle (the y axis) -->
     <link name="${prefix}_wheel_link">
