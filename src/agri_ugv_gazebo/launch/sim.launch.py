@@ -53,4 +53,8 @@ def generate_launch_description():
         spawner('joint_state_broadcaster'),
         spawner('steering_controller'),
         spawner('wheel_controller'),
+        
+        # Our driver: /cmd_vel -> steering angles and wheel speeds, on simulation time
+        Node(package='agri_ugv_control', executable='four_ws_driver', output='screen',
+             parameters=[{'use_sim_time': True}]),
     ])

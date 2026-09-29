@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'kinematic_sim = agri_ugv_control.kinematic_sim_node:main',
+            'four_ws_driver = agri_ugv_control.four_ws_driver_node:main',
         ],
     },
 )
