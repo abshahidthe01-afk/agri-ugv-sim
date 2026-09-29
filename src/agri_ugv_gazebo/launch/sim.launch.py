@@ -45,15 +45,18 @@ def generate_launch_description():
         Node(package='ros_gz_sim', executable='create', output='screen',
              arguments=['-topic', 'robot_description', '-name', 'agri_ugv', '-z', '0.1']),
 
-        # Gazebo's clock -> ROS, so ROS programs run on simulation time
+        # Bridge Gazebo -> ROS ('[' means one direction only, Gazebo to ROS):
+        # - the simulation clock, so ROS programs run on simulation time
+        # - the true pose and velocity of the robot, from the model's odometry plugin
         Node(package='ros_gz_bridge', executable='parameter_bridge',
-             arguments=['/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock']),
+             arguments=['/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock',
+                        '/ground_truth/odom@nav_msgs/msg/Odometry[ignition.msgs.Odometry']),
 
         # Controllers: they wait until the robot (and its controller manager) exists
         spawner('joint_state_broadcaster'),
         spawner('steering_controller'),
         spawner('wheel_controller'),
-        
+
         # Our driver: /cmd_vel -> steering angles and wheel speeds, on simulation time
         Node(package='agri_ugv_control', executable='four_ws_driver', output='screen',
              parameters=[{'use_sim_time': True}]),

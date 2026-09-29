@@ -41,6 +41,19 @@
         <parameters>${controllers_file}</parameters>
       </plugin>
     </gazebo>
+        <!-- Ground truth: Gazebo publishes the robot's true pose and velocity (no noise).
+         The pose is base_footprint in the Gazebo world frame. The velocity is the change
+         in pose per physics step, averaged over the last 10 steps (10 ms with 1 ms steps). -->
+    <gazebo>
+      <plugin filename="ignition-gazebo-odometry-publisher-system"
+              name="ignition::gazebo::systems::OdometryPublisher">
+        <odom_frame>world</odom_frame>
+        <robot_base_frame>base_footprint</robot_base_frame>
+        <odom_publish_frequency>50</odom_publish_frequency>
+        <odom_topic>/ground_truth/odom</odom_topic>
+        <dimensions>3</dimensions>
+      </plugin>
+    </gazebo>
   </xacro:macro>
 
 </robot>
