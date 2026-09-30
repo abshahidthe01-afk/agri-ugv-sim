@@ -31,6 +31,17 @@ photos, or an engineering assumption.
 Resulting centre of mass: 0.894 m above ground (computed from the robot model, checked by a unit test).
 Static tip-over angle: about 40 deg sideways, about 37 deg forward/backward.
 
+## Suspension (derived from the masses)
+
+Each spring carries a quarter of the sprung mass (frame, enclosure and steering
+motors: 216 kg, so 54 kg per wheel) and is sized so the robot rests at
+mid-travel: stiffness 10.6 kN/m, damping 605 N s/m (damping ratio 0.4, assumed).
+
+In Gazebo the robot rests about 2.5 mm below mid-travel. The physics engine
+(DART) applies joint damping before it resolves ground contacts, so the dampers
+of the standing robot push with a small phantom force (about 26 N per wheel with
+1 ms time steps). Measured: the offset doubles with twice the damping and halves
+with half the time step.
 ## References
 
 1. L. Grimstad and P. J. From, "The Thorvald II Agricultural Robotic System",
