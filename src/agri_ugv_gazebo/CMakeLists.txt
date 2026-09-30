@@ -4,7 +4,7 @@ project(agri_ugv_gazebo)
 find_package(ament_cmake REQUIRED)
 
 install(
-  DIRECTORY worlds launch
+  DIRECTORY worlds launch models
   DESTINATION share/${PROJECT_NAME}
 )
 

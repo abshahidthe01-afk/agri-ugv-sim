@@ -1,7 +1,8 @@
 """Start Gazebo Fortress with a world, spawn the robot, and start its controllers."""
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import (AppendEnvironmentVariable, DeclareLaunchArgument,
+                            IncludeLaunchDescription)
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -10,7 +11,8 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    world = LaunchConfiguration('world')
+    share = FindPackageShare('agri_ugv_gazebo')
+    world_file = PathJoinSubstitution([share, 'worlds', [LaunchConfiguration('world'), '.sdf']])
     model = PathJoinSubstitution(
         [FindPackageShare('agri_ugv_description'), 'urdf', 'agri_ugv.urdf.xacro'])
     controllers = PathJoinSubstitution(
@@ -24,18 +26,20 @@ def generate_launch_description():
                     arguments=[controller], output='screen')
 
     return LaunchDescription([
-        # Which world to load; can be changed from the command line with world:=...
+        # Which world to load: a file name from this package's worlds folder, without .sdf
         DeclareLaunchArgument(
-            'world',
-            default_value=PathJoinSubstitution(
-                [FindPackageShare('agri_ugv_gazebo'), 'worlds', 'flat.sdf']),
-            description='Full path of the Gazebo world file'),
+            'world', default_value='flat',
+            description='World name, e.g. flat or flat_mesh (loads worlds/<name>.sdf)'),
+
+        # Let Gazebo find our generated terrain models (model://<name>) in the models folder
+        AppendEnvironmentVariable(
+            'IGN_GAZEBO_RESOURCE_PATH', PathJoinSubstitution([share, 'models'])),
 
         # Gazebo itself (-r: start running immediately)
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution(
                 [FindPackageShare('ros_gz_sim'), 'launch', 'gz_sim.launch.py'])),
-            launch_arguments={'gz_args': ['-r ', world]}.items()),
+            launch_arguments={'gz_args': ['-r ', world_file]}.items()),
 
         # The robot model (with ros2_control) on /robot_description, on simulation time
         Node(package='robot_state_publisher', executable='robot_state_publisher',
