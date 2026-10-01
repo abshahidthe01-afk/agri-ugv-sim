@@ -26,3 +26,11 @@ def test_command_line(tmp_path, capsys):
           '--spacing', '0.5', '--output-dir', str(tmp_path)])
     assert (tmp_path / 'flat_mesh' / 'meshes' / 'flat_mesh.obj').is_file()
     assert '3 x 5 points, 16 triangles' in capsys.readouterr().out
+
+
+def test_command_line_waves(tmp_path, capsys):
+    main(['--shape', 'waves', '--name', 'waves', '--length', '27', '--width', '6',
+          '--spacing', '0.15', '--output-dir', str(tmp_path)])
+    assert '41 x 181 points, 14400 triangles' in capsys.readouterr().out
+    config = (tmp_path / 'waves' / 'model.config').read_text()
+    assert 'waves along x +-0.05 m every 2.7 m' in config

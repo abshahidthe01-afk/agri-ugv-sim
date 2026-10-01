@@ -1,6 +1,7 @@
 """Tests for the test-terrain height grids."""
 
-from agri_ugv_terrain.shapes import flat, grid_shape
+from agri_ugv_terrain.heightfield import mesh_from_heights
+from agri_ugv_terrain.shapes import flat, grid_shape, waves
 import numpy as np
 import pytest
 
@@ -25,3 +26,35 @@ def test_flat_is_all_zero():
     heights = flat(2.0, 1.0, 0.5)
     assert heights.shape == (3, 5)
     assert np.all(heights == 0.0)
+
+
+def test_waves_crests_and_troughs_land_on_grid_points():
+    heights = waves(27.0, 6.0, 0.15, 0.05, 2.7)
+    assert heights.shape == (41, 181)
+    assert heights.max() == pytest.approx(0.05)
+    assert heights.min() == pytest.approx(-0.05)
+    assert heights[0, 90] == pytest.approx(0.05)   # centre column, x = 0: crest
+    assert heights[0, 99] == pytest.approx(-0.05)  # 9 columns = 1.35 m further: trough
+
+
+def test_waves_are_the_same_across_y():
+    heights = waves(27.0, 6.0, 0.15, 0.05, 2.7)
+    assert np.all(heights == heights[0])
+
+
+def test_waves_match_the_mesh_coordinates():
+    heights = waves(5.4, 1.5, 0.15, 0.05, 2.7)
+    vertices, _ = mesh_from_heights(heights, 0.15)
+    expected = 0.05 * np.cos(2.0 * np.pi * vertices[:, 0] / 2.7)
+    assert vertices[:, 2] == pytest.approx(expected)
+
+
+@pytest.mark.parametrize('amplitude, wavelength', [
+    (-0.05, 2.7),         # negative amplitude
+    (float('nan'), 2.7),
+    (0.05, 0.0),
+    (0.05, 0.5),          # fewer than 4 points per wave at 0.15 m spacing
+])
+def test_bad_waves_are_rejected(amplitude, wavelength):
+    with pytest.raises(ValueError):
+        waves(27.0, 6.0, 0.15, amplitude, wavelength)

@@ -1,5 +1,6 @@
 """Height grids for test terrains."""
 
+from agri_ugv_terrain.heightfield import grid_axes
 import numpy as np
 
 
@@ -24,3 +25,20 @@ def grid_shape(length, width, spacing):
 def flat(length, width, spacing):
     """Return an all-zero height grid: flat ground at height 0."""
     return np.zeros(grid_shape(length, width, spacing))
+
+
+def waves(length, width, spacing, amplitude, wavelength):
+    """
+    Return waves along x: height = amplitude * cos(2 pi x / wavelength), the same for every y.
+
+    x is measured from the centre of the grid, so there is a crest at x = 0 and the
+    heights go from -amplitude (troughs) to +amplitude (crests).
+    """
+    if not (np.isfinite(amplitude) and amplitude >= 0.0):
+        raise ValueError(f'amplitude must be zero or positive, got {amplitude}')
+    if not (np.isfinite(wavelength) and wavelength >= 4.0 * spacing):
+        raise ValueError(
+            f'wavelength ({wavelength} m) needs at least 4 grid points, so >= {4 * spacing} m')
+    rows, cols = grid_shape(length, width, spacing)
+    x, _ = grid_axes(rows, cols, spacing)
+    return np.tile(amplitude * np.cos(2.0 * np.pi * x / wavelength), (rows, 1))

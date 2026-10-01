@@ -22,6 +22,13 @@ def check_heights(heights, spacing):
     return grid
 
 
+def grid_axes(rows, cols, spacing):
+    """Return the x (one per column) and y (one per row) coordinates, centred on the origin."""
+    x = (np.arange(cols) - (cols - 1) / 2.0) * spacing
+    y = (np.arange(rows) - (rows - 1) / 2.0) * spacing
+    return x, y
+
+
 def mesh_from_heights(heights, spacing):
     """
     Build a triangle mesh from a height grid, centred on the origin.
@@ -32,9 +39,7 @@ def mesh_from_heights(heights, spacing):
     """
     grid = check_heights(heights, spacing)
     rows, cols = grid.shape
-    x = (np.arange(cols) - (cols - 1) / 2.0) * spacing
-    y = (np.arange(rows) - (rows - 1) / 2.0) * spacing
-    xx, yy = np.meshgrid(x, y)
+    xx, yy = np.meshgrid(*grid_axes(rows, cols, spacing))
     vertices = np.column_stack([xx.ravel(), yy.ravel(), grid.ravel()])
 
     index = np.arange(rows * cols).reshape(rows, cols)
