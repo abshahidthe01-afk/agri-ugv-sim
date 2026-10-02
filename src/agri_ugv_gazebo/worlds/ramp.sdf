@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<sdf version="1.8">
+  <world name="ramp">
+
+    <!-- A straight 10 % slope, to test traction and wheel slip on soil profiles.
+         Made by agri_ugv_terrain; the robot starts at x = 0 facing uphill (+x). -->
+
+    <!-- Physics: 1 ms time steps, running at real-time speed -->
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- Core systems: physics, accepting commands (e.g. spawning), sending the scene to the GUI -->
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Ground: 30 x 6 m straight slope along x, 10 % grade (5.7 deg), height 0 at the origin -->
+    <include>
+      <uri>model://ramp</uri>
+    </include>
+
+  </world>
+</sdf>

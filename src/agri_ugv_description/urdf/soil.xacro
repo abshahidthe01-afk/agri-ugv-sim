@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<!-- Soil profiles for Gazebo: wheel-soil friction and wheel slip (WheelSlip system).
+     The values are assumptions (order of magnitude of typical tyre-on-soil traction curves),
+     see docs/robot_spec.md. Gazebo uses the smaller friction and the sum of the slip
+     compliances of the two touching surfaces, and the terrain keeps the defaults (1 and 0),
+     so these wheel values decide. Soil 'rigid' (the default) adds nothing. -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- name: [friction coefficient, slip compliance (slip ratio per tangential/normal force)] -->
+  <xacro:property name="soil_profiles"
+                  value="${dict(firm=[0.65, 0.2], soft=[0.45, 0.55], wet=[0.3, 1.0])}"/>
+
+  <xacro:macro name="wheel_friction" params="prefix mu">
+    <gazebo reference="${prefix}_wheel_link">
+      <mu1>${mu}</mu1>
+      <mu2>${mu}</mu2>
+      <!-- First friction direction along the axle (the cylinder's own z axis), as WheelSlip expects -->
+      <fdir1>0 0 1</fdir1>
+    </gazebo>
+  </xacro:macro>
+
+  <xacro:macro name="wheel_slip" params="prefix compliance normal_force">
+    <wheel link_name="${prefix}_wheel_link">
+      <slip_compliance_lateral>${compliance}</slip_compliance_lateral>
+      <slip_compliance_longitudinal>${compliance}</slip_compliance_longitudinal>
+      <wheel_normal_force>${normal_force}</wheel_normal_force>
+      <wheel_radius>${wheel_radius}</wheel_radius>
+    </wheel>
+  </xacro:macro>
+
+  <xacro:macro name="soil_model" params="soil">
+    <xacro:if value="${soil not in soil_profiles}">
+      ${xacro.fatal('unknown soil ' + soil + ': use rigid, firm, soft or wet')}
+    </xacro:if>
+    <xacro:property name="mu" value="${soil_profiles[soil][0]}"/>
+    <xacro:property name="compliance" value="${soil_profiles[soil][1]}"/>
+    <!-- Static load on each wheel: a quarter of the sprung mass, plus its leg and wheel -->
+    <xacro:property name="normal_force" value="${(sprung_mass_per_wheel + leg_mass + wheel_mass) * gravity}"/>
+    <xacro:wheel_friction prefix="front_left" mu="${mu}"/>
+    <xacro:wheel_friction prefix="front_right" mu="${mu}"/>
+    <xacro:wheel_friction prefix="rear_left" mu="${mu}"/>
+    <xacro:wheel_friction prefix="rear_right" mu="${mu}"/>
+    <gazebo>
+      <plugin filename="ignition-gazebo-wheel-slip-system"
+              name="ignition::gazebo::systems::WheelSlip">
+        <xacro:wheel_slip prefix="front_left" compliance="${compliance}" normal_force="${normal_force}"/>
+        <xacro:wheel_slip prefix="front_right" compliance="${compliance}" normal_force="${normal_force}"/>
+        <xacro:wheel_slip prefix="rear_left" compliance="${compliance}" normal_force="${normal_force}"/>
+        <xacro:wheel_slip prefix="rear_right" compliance="${compliance}" normal_force="${normal_force}"/>
+      </plugin>
+    </gazebo>
+  </xacro:macro>
+
+</robot>

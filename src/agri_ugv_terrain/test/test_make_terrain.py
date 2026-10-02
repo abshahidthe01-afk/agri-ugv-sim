@@ -36,6 +36,12 @@ def test_command_line_waves(tmp_path, capsys):
     assert 'waves along x +-0.05 m every 2.7 m' in config
 
 
+def test_command_line_ramp(tmp_path, capsys):
+    main(['--shape', 'ramp', '--name', 'ramp', '--length', '30', '--width', '6',
+          '--grade', '0.1', '--output-dir', str(tmp_path)])
+    assert '13 x 61 points, 1440 triangles, heights -1.500 to +1.500 m' in capsys.readouterr().out
+
+
 def test_command_line_dem(tmp_path, capsys):
     rasterio = pytest.importorskip('rasterio')
     from rasterio.transform import from_origin

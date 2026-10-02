@@ -3,9 +3,12 @@
 
   <xacro:include filename="inertial_macros.xacro"/>
   <xacro:include filename="gazebo_control.xacro"/>
+  <xacro:include filename="soil.xacro"/>
 
   <!-- Path to the controller settings; empty = no ros2_control (e.g. RViz only) -->
   <xacro:arg name="controllers_file" default=""/>
+  <!-- Soil profile in Gazebo: rigid (default, no slip model), firm, soft or wet (soil.xacro) -->
+  <xacro:arg name="soil" default="rigid"/>
   <!-- ============ Dimensions (sources: docs/robot_spec.md) ============ -->
   <xacro:property name="track"           value="1.50"/>   <!-- left-right wheel spacing -->
   <xacro:property name="wheelbase"       value="1.35"/>   <!-- front-rear steering axes -->
@@ -237,6 +240,9 @@
     <!-- ============ ros2_control (only when a controllers file is given) ============ -->
   <xacro:if value="${'$(arg controllers_file)' != ''}">
     <xacro:gazebo_control controllers_file="$(arg controllers_file)"/>
+    <xacro:if value="${'$(arg soil)' != 'rigid'}">
+      <xacro:soil_model soil="$(arg soil)"/>
+    </xacro:if>
   </xacro:if>
 
 </robot>

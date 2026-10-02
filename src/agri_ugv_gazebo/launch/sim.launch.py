@@ -18,7 +18,8 @@ def generate_launch_description():
     controllers = PathJoinSubstitution(
         [FindPackageShare('agri_ugv_control'), 'config', 'controllers.yaml'])
     robot_description = ParameterValue(
-        Command(['xacro ', model, ' controllers_file:=', controllers]), value_type=str)
+        Command(['xacro ', model, ' controllers_file:=', controllers,
+                 ' soil:=', LaunchConfiguration('soil')]), value_type=str)
 
     def spawner(controller):
         """Ask the controller manager to load and start one controller."""
@@ -30,6 +31,9 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'world', default_value='flat',
             description='World name, e.g. flat or flat_mesh (loads worlds/<name>.sdf)'),
+        DeclareLaunchArgument(
+            'soil', default_value='rigid',
+            description='Soil profile: rigid (no slip model), firm, soft or wet'),
 
         # Let Gazebo find our generated terrain models (model://<name>) in the models folder
         AppendEnvironmentVariable(

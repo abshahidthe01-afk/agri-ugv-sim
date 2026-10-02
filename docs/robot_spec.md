@@ -42,6 +42,22 @@ In Gazebo the robot rests about 2.5 mm below mid-travel. The physics engine
 of the standing robot push with a small phantom force (about 26 N per wheel with
 1 ms time steps). Measured: the offset doubles with twice the damping and halves
 with half the time step.
+
+## Soil profiles (assumed)
+
+Gazebo is rigid, so soil is approximated by wheel friction and wheel slip (Gazebo's
+WheelSlip system), chosen with the launch argument `soil:=`; `rigid` (default) keeps
+Gazebo's default contact without a slip model. Slip compliance is the wheel slip ratio per
+unit of tangential/normal force; the static wheel load (686.7 N) comes from the masses.
+The values are order-of-magnitude assumptions from typical tyre-on-soil traction curves,
+not measurements. Sinkage and rolling resistance are not modelled.
+
+| Profile | Friction coefficient | Slip compliance |
+|---|---|---|
+| firm | 0.65 | 0.2 |
+| soft | 0.45 | 0.55 |
+| wet | 0.3 | 1.0 |
+
 ## References
 
 1. L. Grimstad and P. J. From, "The Thorvald II Agricultural Robotic System",

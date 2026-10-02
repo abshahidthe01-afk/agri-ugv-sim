@@ -42,3 +42,16 @@ def waves(length, width, spacing, amplitude, wavelength):
     rows, cols = grid_shape(length, width, spacing)
     x, _ = grid_axes(rows, cols, spacing)
     return np.tile(amplitude * np.cos(2.0 * np.pi * x / wavelength), (rows, 1))
+
+
+def ramp(length, width, spacing, grade):
+    """
+    Return a straight slope along x: height = grade * x, so the origin is at height 0.
+
+    grade is rise over run (0.10 = 10 %, about 5.7 deg); negative values slope down along +x.
+    """
+    if not (np.isfinite(grade) and abs(grade) <= 1.0):
+        raise ValueError(f'grade must be between -1 and 1 (45 deg), got {grade}')
+    rows, cols = grid_shape(length, width, spacing)
+    x, _ = grid_axes(rows, cols, spacing)
+    return np.tile(grade * x, (rows, 1))

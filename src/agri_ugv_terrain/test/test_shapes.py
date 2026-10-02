@@ -1,7 +1,7 @@
 """Tests for the test-terrain height grids."""
 
 from agri_ugv_terrain.heightfield import mesh_from_heights
-from agri_ugv_terrain.shapes import flat, grid_shape, waves
+from agri_ugv_terrain.shapes import flat, grid_shape, ramp, waves
 import numpy as np
 import pytest
 
@@ -58,3 +58,17 @@ def test_waves_match_the_mesh_coordinates():
 def test_bad_waves_are_rejected(amplitude, wavelength):
     with pytest.raises(ValueError):
         waves(27.0, 6.0, 0.15, amplitude, wavelength)
+
+
+def test_ramp_rises_with_the_grade_and_is_zero_at_the_origin():
+    heights = ramp(30.0, 6.0, 0.5, 0.10)
+    assert heights.shape == (13, 61)
+    assert heights[0, 30] == pytest.approx(0.0)              # centre column: x = 0
+    assert heights[0, -1] - heights[0, 0] == pytest.approx(3.0)  # 30 m at 10 %
+    assert np.all(heights == heights[0])
+
+
+@pytest.mark.parametrize('grade', [1.5, -1.01, float('nan')])
+def test_bad_grades_are_rejected(grade):
+    with pytest.raises(ValueError):
+        ramp(30.0, 6.0, 0.5, grade)
