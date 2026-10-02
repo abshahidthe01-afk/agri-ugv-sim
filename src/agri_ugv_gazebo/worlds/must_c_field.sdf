@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<sdf version="1.8">
+  <world name="must_c_field">
+
+    <!-- The real MuST-C field at Campus Klein-Altendorf, from the drone elevation map of
+         17 May 2023 (MuST-C dataset, CC BY 4.0, Chong et al. 2026), made by agri_ugv_terrain. -->
+
+    <!-- Physics: 1 ms time steps, running at real-time speed -->
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- Core systems: physics, accepting commands (e.g. spawning), sending the scene to the GUI -->
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
+
+    <!-- The world origin is a real place: x points east, y north. Simulated GNSS receivers
+         report these coordinates at x = y = 0; elevation = the terrain's reference height. -->
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <world_frame_orientation>ENU</world_frame_orientation>
+      <latitude_deg>50.6261275</latitude_deg>
+      <longitude_deg>6.9848832</longitude_deg>
+      <elevation>221.845</elevation>
+      <heading_deg>0</heading_deg>
+    </spherical_coordinates>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Ground: 174.6 x 63.9 m real terrain, 0.45 m grid (UTM 32N E 357472.44 N 5610188.04) -->
+    <include>
+      <uri>model://must_c_field</uri>
+    </include>
+
+  </world>
+</sdf>

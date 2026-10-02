@@ -11,9 +11,9 @@ rows on real terrain. ROS 2 Humble and Gazebo Fortress.
 - Four-wheel-steering kinematics, unit-tested
 - Gazebo simulation with ros2_control, speed limits and a watchdog
 - Ground-truth pose and velocity from Gazebo
+- Terrain generator: test terrains and the real MuST-C field from drone elevation data
 
-Next: terrain, GNSS/IMU localization, field layout, coverage planning and
-LiDAR row following.
+Next: GNSS/IMU localization, field layout, coverage planning and LiDAR row following.
 
 ## Quick start
 
@@ -23,8 +23,10 @@ cd agri_ugv_ws
 rosdep install --from-paths src --ignore-src -y
 colcon build --symlink-install
 source install/setup.bash
-ros2 launch agri_ugv_gazebo sim.launch.py
+ros2 launch agri_ugv_gazebo sim.launch.py world:=must_c_field
 ```
+
+Worlds: `flat` (default), `flat_mesh`, `waves`, `must_c_field`.
 
 Drive it from a second terminal:
 
@@ -35,10 +37,19 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard
 
 ## Data and sources
 
-Terrain and field layout will be derived from the MuST-C dataset (PhenoRob,
-University of Bonn). Robot dimensions follow the Thorvald II (Grimstad & From,
-2017) and the Bonn field phenotyping robot (Esser et al., 2023).
+The `must_c_field` terrain is derived from the MuST-C drone elevation map (DEM) of
+17 May 2023: resampled to a 0.45 m grid using the 10th height percentile per cell,
+gaps outside the field filled, heights relative to the field centre.
+
+- Dataset: Chong, Yue Linn, 2025, "MuST-C Dataset: The Multi-Sensor and Multi-Temporal
+  Data Set of Multiple Crops for In-Field Phenotyping and Monitoring",
+  https://doi.org/10.60507/FK2/OX9XTM, bonndata, V3. License: CC BY 4.0.
+- Paper: Chong et al., Scientific Data, 2026, https://doi.org/10.1038/s41597-025-06462-y
+
+Robot dimensions follow the Thorvald II (Grimstad & From, 2017) and the Bonn field
+phenotyping robot (Esser et al., 2023).
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+Code: MIT, see [LICENSE](LICENSE). The terrain files derived from MuST-C are shared
+under CC BY 4.0, like their source.
