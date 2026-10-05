@@ -12,8 +12,9 @@ rows on real terrain. ROS 2 Humble and Gazebo Fortress.
 - Gazebo simulation with ros2_control, speed limits and a watchdog
 - Ground-truth pose and velocity from Gazebo
 - Terrain generator: test terrains and the real MuST-C field from drone elevation data
+- Field layout: the 80 plots of the real MuST-C trial, from its official shapefile
 
-Next: GNSS/IMU localization, field layout, coverage planning and LiDAR row following.
+Next: crop plants, GNSS/IMU localization, coverage planning and LiDAR row following.
 
 ## Quick start
 
@@ -41,6 +42,8 @@ The `must_c_field` terrain is derived from the MuST-C drone elevation map (DEM) 
 aerial photo (orthophoto) of 17 May 2023: heights resampled to a 0.45 m grid using the
 10th height percentile per cell, gaps outside the field filled, heights relative to the
 field centre; the photo is used as the terrain's texture at 6 cm per pixel.
+The plot layout (`src/agri_ugv_field/data/must_c_field_plots.csv`) comes from the
+dataset's field shapefile (`md_FieldSHP`), placed in the same world frame.
 
 - Dataset: Chong, Yue Linn, 2025, "MuST-C Dataset: The Multi-Sensor and Multi-Temporal
   Data Set of Multiple Crops for In-Field Phenotyping and Monitoring",
@@ -52,5 +55,5 @@ phenotyping robot (Esser et al., 2023).
 
 ## License
 
-Code: MIT, see [LICENSE](LICENSE). The terrain files derived from MuST-C are shared
-under CC BY 4.0, like their source.
+Code: MIT, see [LICENSE](LICENSE). The terrain and field layout files derived from
+MuST-C are shared under CC BY 4.0, like their source.
