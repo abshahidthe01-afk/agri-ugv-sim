@@ -75,6 +75,40 @@ def heights_from_dem(heights, valid, block, percentile, min_valid=0.5):
     return grid - reference, reference
 
 
+def texture_from_ortho(rgb, block, rows, cols, factor):
+    """
+    Cut the area covered by a rows x cols terrain grid out of an aerial photo and shrink it.
+
+    rgb is the photo as (height, width, 3), on the same pixel grid as the DEM; the terrain
+    used the first rows * block by cols * block pixels. factor > 1 averages factor x factor
+    pixels into one, to keep the texture file small.
+    """
+    rgb = np.asarray(rgb)
+    if rgb.ndim != 3 or rgb.shape[2] != 3:
+        raise ValueError(f'expected an RGB image of shape (height, width, 3), got {rgb.shape}')
+    height, width = rows * block, cols * block
+    if rgb.shape[0] < height or rgb.shape[1] < width:
+        raise ValueError(f'photo {rgb.shape[:2]} is smaller than the terrain {height, width}')
+    if int(factor) != factor or factor < 1 or height % factor or width % factor:
+        raise ValueError(f'factor must be a whole number that divides {height} and {width}')
+    factor = int(factor)
+    area = rgb[:height, :width].astype(float)
+    small = area.reshape(height // factor, factor, width // factor, factor, 3).mean(axis=(1, 3))
+    return np.round(small).astype(np.uint8)
+
+
+def read_ortho(path):
+    """Read an RGB GeoTIFF; returns (rgb as (height, width, 3) uint8, pixel_size, left, top)."""
+    import rasterio  # only needed for real photo files, so imported here
+
+    with rasterio.open(path) as src:
+        if src.count != 3 or src.dtypes[0] != 'uint8':
+            raise ValueError(f'{path}: expected 3 bands of uint8, got {src.count} {src.dtypes[0]}')
+        transform = src.transform
+        rgb = np.moveaxis(src.read(), 0, -1)
+        return rgb, float(transform.a), float(transform.c), float(transform.f)
+
+
 def read_dem(path):
     """
     Read a single-band, north-up GeoTIFF with square pixels.

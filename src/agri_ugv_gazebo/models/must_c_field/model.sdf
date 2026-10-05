@@ -12,10 +12,6 @@
         <geometry>
           <mesh><uri>meshes/must_c_field.obj</uri></mesh>
         </geometry>
-        <material>
-          <ambient>0.45 0.35 0.25 1</ambient>
-          <diffuse>0.45 0.35 0.25 1</diffuse>
-        </material>
       </visual>
     </link>
   </model>

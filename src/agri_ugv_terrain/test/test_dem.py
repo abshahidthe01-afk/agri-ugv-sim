@@ -1,6 +1,7 @@
 """Tests for turning a DEM raster into a terrain height grid."""
 
-from agri_ugv_terrain.dem import block_percentile, fill_gaps, heights_from_dem, read_dem
+from agri_ugv_terrain.dem import (block_percentile, fill_gaps, heights_from_dem, read_dem,
+                                  read_ortho, texture_from_ortho)
 import numpy as np
 import pytest
 
@@ -79,3 +80,34 @@ def test_read_dem_round_trip(tmp_path):
     assert pixel == pytest.approx(0.03)
     assert (left, top) == pytest.approx((1000.0, 2000.0))
     assert crs == 'EPSG:32632'
+
+
+def test_texture_from_ortho_crops_the_terrain_area_and_averages():
+    rgb = np.zeros((7, 13, 3), dtype=np.uint8)
+    rgb[:2, :2] = [100, 200, 50]           # top-left 2 x 2 pixels
+    rgb[:, 12] = 255                       # the leftover column is not part of the terrain
+    small = texture_from_ortho(rgb, 3, 2, 4, 2)   # terrain: 2 x 4 cells of 3 x 3 pixels
+    assert small.shape == (3, 6, 3)
+    assert small[0, 0].tolist() == [100, 200, 50]
+    assert small.max() < 255
+
+
+@pytest.mark.parametrize('shape, factor', [((7, 13), 2), ((5, 12, 3), 2), ((6, 12, 3), 4)])
+def test_bad_photos_or_factors_are_rejected(shape, factor):
+    with pytest.raises(ValueError):
+        texture_from_ortho(np.zeros(shape, dtype=np.uint8), 3, 2, 4, factor)
+
+
+def test_read_ortho_round_trip(tmp_path):
+    rasterio = pytest.importorskip('rasterio')
+    from rasterio.transform import from_origin
+    data = np.arange(2 * 3 * 3, dtype=np.uint8).reshape(3, 2, 3)   # bands, rows, cols
+    path = tmp_path / 'ortho.tif'
+    with rasterio.open(path, 'w', driver='GTiff', height=2, width=3, count=3, dtype='uint8',
+                       crs='EPSG:32632', transform=from_origin(1000.0, 2000.0, 0.03, 0.03)) as dst:
+        dst.write(data)
+    rgb, pixel, left, top = read_ortho(path)
+    assert rgb.shape == (2, 3, 3)
+    assert rgb[1, 2].tolist() == [5, 11, 17]   # pixel (1, 2) across the three bands
+    assert pixel == pytest.approx(0.03)
+    assert (left, top) == pytest.approx((1000.0, 2000.0))

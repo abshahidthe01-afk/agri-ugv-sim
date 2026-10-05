@@ -69,3 +69,27 @@ def test_dem_spacing_must_fit_the_pixels(tmp_path):
     with pytest.raises(ValueError):
         main(['--shape', 'dem', '--name', 'field', '--dem-file', str(path), '--spacing', '0.1',
               '--output-dir', str(tmp_path)])
+
+
+def test_command_line_dem_with_texture(tmp_path):
+    rasterio = pytest.importorskip('rasterio')
+    pytest.importorskip('PIL')
+    from rasterio.transform import from_origin
+    grid = {'driver': 'GTiff', 'height': 20, 'width': 30, 'crs': 'EPSG:32632',
+            'transform': from_origin(1000.0, 2000.0, 0.03, 0.03)}
+    with rasterio.open(tmp_path / 'dem.tif', 'w', count=1, dtype='float32', **grid) as dst:
+        dst.write(np.full((20, 30), 222.0, dtype='float32'), 1)
+    photo = np.zeros((3, 20, 30), dtype=np.uint8)
+    photo[0, :10] = 255                    # northern half red
+    with rasterio.open(tmp_path / 'ortho.tif', 'w', count=3, dtype='uint8', **grid) as dst:
+        dst.write(photo)
+    main(['--shape', 'dem', '--name', 'field', '--dem-file', str(tmp_path / 'dem.tif'),
+          '--ortho-file', str(tmp_path / 'ortho.tif'), '--spacing', '0.15',
+          '--output-dir', str(tmp_path)])
+    meshes = tmp_path / 'field' / 'meshes'
+    assert (meshes / 'field.mtl').read_text().endswith('map_Kd field.jpg\n')
+    assert 'usemtl field' in (meshes / 'field.obj').read_text()
+    from PIL import Image
+    image = np.asarray(Image.open(meshes / 'field.jpg'))
+    assert image.shape == (10, 15, 3)      # 4 x 6 cells of 5 x 5 pixels, shrunk by 2
+    assert image[0, 0, 0] > 200 and image[-1, 0, 0] < 50   # north (top) red, south not

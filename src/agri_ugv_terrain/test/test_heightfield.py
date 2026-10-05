@@ -2,8 +2,8 @@
 
 from xml.etree import ElementTree
 
-from agri_ugv_terrain.heightfield import (mesh_from_heights, model_config, model_sdf,
-                                          obj_text, vertex_normals)
+from agri_ugv_terrain.heightfield import (cell_centre_uvs, mesh_from_heights, model_config,
+                                          model_sdf, mtl_text, obj_text, vertex_normals)
 import numpy as np
 import pytest
 
@@ -124,3 +124,35 @@ def test_model_config():
     config = ElementTree.fromstring(model_config('flat_mesh', 'A flat test terrain.'))
     assert config.findtext('name') == 'flat_mesh'
     assert config.findtext('sdf') == 'model.sdf'
+
+
+def test_cell_centre_uvs_put_south_west_at_the_bottom_left():
+    uvs = cell_centre_uvs(2, 4)
+    assert uvs.shape == (8, 2)
+    assert uvs[0] == pytest.approx([0.125, 0.25])    # first vertex: south-west corner cell
+    assert uvs[-1] == pytest.approx([0.875, 0.75])   # last vertex: north-east corner cell
+
+
+def test_textured_obj_refers_to_the_material_and_texture_coordinates():
+    heights = np.zeros((2, 3))
+    vertices, faces = mesh_from_heights(heights, 0.5)
+    text = obj_text(vertices, vertex_normals(heights, 0.5), faces, cell_centre_uvs(2, 3), 'field')
+    lines = text.splitlines()
+    assert lines[1:3] == ['mtllib field.mtl', 'usemtl field']
+    assert sum(line.startswith('vt ') for line in lines) == 6
+    assert [line for line in lines if line.startswith('f ')][0] == 'f 1/1/1 2/2/2 5/5/5'
+
+
+def test_obj_needs_uvs_and_material_together():
+    vertices, faces = mesh_from_heights(np.zeros((2, 2)), 0.5)
+    normals = vertex_normals(np.zeros((2, 2)), 0.5)
+    with pytest.raises(ValueError):
+        obj_text(vertices, normals, faces, uvs=cell_centre_uvs(2, 2))
+
+
+def test_mtl_and_textured_model_sdf():
+    assert 'map_Kd field.jpg' in mtl_text('field', 'field.jpg')
+    model = ElementTree.fromstring(model_sdf('field', 'field.obj', textured=True)).find('model')
+    assert model.find('link/visual/material') is None   # the .mtl brings the colours
+    plain = ElementTree.fromstring(model_sdf('field', 'field.obj')).find('model')
+    assert plain.find('link/visual/material') is not None

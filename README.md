@@ -37,9 +37,10 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard
 
 ## Data and sources
 
-The `must_c_field` terrain is derived from the MuST-C drone elevation map (DEM) of
-17 May 2023: resampled to a 0.45 m grid using the 10th height percentile per cell,
-gaps outside the field filled, heights relative to the field centre.
+The `must_c_field` terrain is derived from the MuST-C drone elevation map (DEM) and
+aerial photo (orthophoto) of 17 May 2023: heights resampled to a 0.45 m grid using the
+10th height percentile per cell, gaps outside the field filled, heights relative to the
+field centre; the photo is used as the terrain's texture at 6 cm per pixel.
 
 - Dataset: Chong, Yue Linn, 2025, "MuST-C Dataset: The Multi-Sensor and Multi-Temporal
   Data Set of Multiple Crops for In-Field Phenotyping and Monitoring",
