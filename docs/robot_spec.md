@@ -58,6 +58,14 @@ not measurements. Sinkage and rolling resistance are not modelled.
 | soft | 0.45 | 0.55 |
 | wet | 0.3 | 1.0 |
 
+## Sensors (simulated)
+
+| Sensor | Where | Output |
+|---|---|---|
+| IMU (accelerometer, gyroscope) | `imu_link`, on the body 0.90 m above the ground, near the centre of mass (0.894 m) | `/imu`, 100 Hz, no noise yet |
+
+Gazebo uses the SDF default gravity of 9.8 m/s² (the suspension above was sized with 9.81; 0.1 % apart).
+
 ## References
 
 1. L. Grimstad and P. J. From, "The Thorvald II Agricultural Robotic System",

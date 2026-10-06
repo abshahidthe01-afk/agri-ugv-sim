@@ -4,6 +4,7 @@
   <xacro:include filename="inertial_macros.xacro"/>
   <xacro:include filename="gazebo_control.xacro"/>
   <xacro:include filename="soil.xacro"/>
+  <xacro:include filename="sensors.xacro"/>
 
   <!-- Path to the controller settings; empty = no ros2_control (e.g. RViz only) -->
   <xacro:arg name="controllers_file" default=""/>
@@ -237,6 +238,10 @@
   <xacro:wheel_module prefix="front_right" x_sign="1"  y_sign="-1"/>
   <xacro:wheel_module prefix="rear_left"   x_sign="-1" y_sign="1"/>
   <xacro:wheel_module prefix="rear_right"  x_sign="-1" y_sign="-1"/>
+
+  <!-- ============ Sensors (sensors.xacro) ============ -->
+  <xacro:property name="imu_height" value="0.90"/>  <!-- above ground, near the centre of mass -->
+  <xacro:imu_sensor z="${imu_height - wheel_radius}" rate="100"/>
     <!-- ============ ros2_control (only when a controllers file is given) ============ -->
   <xacro:if value="${'$(arg controllers_file)' != ''}">
     <xacro:gazebo_control controllers_file="$(arg controllers_file)"/>

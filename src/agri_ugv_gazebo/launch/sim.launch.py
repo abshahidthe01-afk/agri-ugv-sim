@@ -58,7 +58,8 @@ def generate_launch_description():
         # - the true pose and velocity of the robot, from the model's odometry plugin
         Node(package='ros_gz_bridge', executable='parameter_bridge',
              arguments=['/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock',
-                        '/ground_truth/odom@nav_msgs/msg/Odometry[ignition.msgs.Odometry']),
+                        '/ground_truth/odom@nav_msgs/msg/Odometry[ignition.msgs.Odometry',
+                        '/imu@sensor_msgs/msg/Imu[ignition.msgs.IMU']),
 
         # Controllers: they wait until the robot (and its controller manager) exists
         spawner('joint_state_broadcaster'),
