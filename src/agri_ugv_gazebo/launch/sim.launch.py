@@ -73,6 +73,10 @@ def generate_launch_description():
         Node(package='agri_ugv_control', executable='four_ws_driver', output='screen',
              parameters=[{'use_sim_time': True}]),
 
+        # Wheel odometry: body velocity from the measured steering angles and wheel speeds
+        Node(package='agri_ugv_control', executable='wheel_odometry', output='screen',
+             parameters=[{'use_sim_time': True}]),
+
         # Simulated RTK receiver: ideal fixes + realistic errors, and the dual-antenna heading
         Node(package='agri_ugv_localization', executable='gnss_errors', output='screen',
              parameters=[{'use_sim_time': True}]),

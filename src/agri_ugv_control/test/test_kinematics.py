@@ -3,7 +3,8 @@
 import math
 import random
 
-from agri_ugv_control.kinematics import inverse_kinematics, WheelModule
+from agri_ugv_control.kinematics import (forward_kinematics, integrate_pose,
+                                         inverse_kinematics, WheelModule)
 import pytest
 
 # Geometry of the robot (docs/robot_spec.md). The tests only need realistic numbers.
@@ -75,3 +76,53 @@ def test_random_motions_reproduce_required_wheel_velocity():
             assert actual_y == pytest.approx(needed_y, abs=1e-9)
             # And the steering joint never exceeds its +-90 deg limit
             assert -math.pi / 2 <= cmd.steer_angle <= math.pi / 2
+
+
+def measured(vx, vy, wz):
+    """Return the steering angles and wheel speeds the inverse kinematics would command."""
+    commands = inverse_kinematics(vx, vy, wz, MODULES, WHEEL_RADIUS)
+    return ([c.steer_angle or 0.0 for c in commands], [c.wheel_speed for c in commands])
+
+
+@pytest.mark.parametrize('motion', [(0.5, 0.0, 0.0), (-0.3, 0.0, 0.0), (0.0, 0.4, 0.0),
+                                    (0.0, 0.0, 0.3), (0.5, 0.2, -0.25), (-0.4, -0.3, 0.6)])
+def test_forward_kinematics_undoes_the_inverse(motion):
+    angles, speeds = measured(*motion)
+    vx, vy, wz, residual = forward_kinematics(angles, speeds, MODULES, WHEEL_RADIUS)
+    assert (vx, vy, wz) == pytest.approx(motion, abs=1e-12)
+    assert residual == pytest.approx(0.0, abs=1e-12)
+
+
+def test_random_motions_round_trip():
+    rng = random.Random(7)
+    for _ in range(200):
+        motion = (rng.uniform(-1.5, 1.5), rng.uniform(-1, 1), rng.uniform(-1, 1))
+        assert forward_kinematics(*measured(*motion), MODULES, WHEEL_RADIUS)[:3] == \
+            pytest.approx(motion, abs=1e-9)
+
+
+def test_a_slipping_wheel_shows_in_the_residual_and_is_averaged_out():
+    angles, speeds = measured(0.5, 0.0, 0.0)
+    speeds[0] *= 1.2                                   # one wheel spins 20 % too fast
+    vx, vy, wz, residual = forward_kinematics(angles, speeds, MODULES, WHEEL_RADIUS)
+    assert vx == pytest.approx(0.525)                  # 0.5 + 0.1 / 4: shared by 4 wheels
+    assert residual > 0.02
+
+
+def test_forward_kinematics_rejects_mismatched_input():
+    with pytest.raises(ValueError):
+        forward_kinematics([0.0], [1.0, 1.0], MODULES, WHEEL_RADIUS)
+
+
+def test_integrating_a_constant_turn_closes_the_circle():
+    x = y = yaw = 0.0
+    dt = 2 * math.pi / 0.5 / 1257                  # 1257 steps of about 10 ms: one full turn
+    for _ in range(1257):
+        x, y, yaw = integrate_pose(x, y, yaw, 1.0, 0.0, 0.5, dt)
+    assert (x, y) == pytest.approx((0.0, 0.0), abs=1e-9)
+    assert yaw == pytest.approx(2 * math.pi, abs=1e-9)
+
+
+def test_integrating_sideways_motion_follows_the_heading():
+    assert integrate_pose(1.0, 2.0, math.pi / 2, 0.0, 0.5, 0.0, 2.0) == pytest.approx(
+        (0.0, 2.0, math.pi / 2))

@@ -7,7 +7,7 @@ Angles in radians, counter-clockwise positive.
 
 from dataclasses import dataclass
 import math
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -61,3 +61,57 @@ def inverse_kinematics(vx: float, vy: float, wz: float,
 
         commands.append(WheelCommand(steer_angle=angle, wheel_speed=speed / wheel_radius))
     return commands
+
+
+def forward_kinematics(steer_angles: List[float], wheel_speeds: List[float],
+                       modules: List[WheelModule],
+                       wheel_radius: float) -> Tuple[float, float, float, float]:
+    """
+    Recover the robot velocity from measured steering angles and wheel speeds (odometry).
+
+    Each wheel's ground velocity must equal (vx - wz * y, vy + wz * x): with four wheels
+    that is 8 equations for 3 unknowns, solved by least squares. Returns
+    (vx, vy, wz, residual), the residual being the RMS mismatch [m/s] between the wheels:
+    zero when they agree, larger when wheels slip or scrub.
+    """
+    if not len(steer_angles) == len(wheel_speeds) == len(modules) >= 2:
+        raise ValueError('need the same number (at least 2) of angles, speeds and modules')
+    measured = [(wheel_radius * w * math.cos(a), wheel_radius * w * math.sin(a))
+                for a, w in zip(steer_angles, wheel_speeds)]
+    n = len(modules)
+    sx, sy = sum(m.x for m in modules), sum(m.y for m in modules)
+    srr = sum(m.x * m.x + m.y * m.y for m in modules)
+    # Normal equations (A^T A) p = A^T b for the rows [1, 0, -y] and [0, 1, x]
+    a = [[n, 0.0, -sy], [0.0, n, sx], [-sy, sx, srr]]
+    b = [sum(vx for vx, _ in measured), sum(vy for _, vy in measured),
+         sum(m.x * vy - m.y * vx for m, (vx, vy) in zip(modules, measured))]
+    vx, vy, wz = _solve3(a, b)
+    squares = sum((vx - wz * m.y - mx) ** 2 + (vy + wz * m.x - my) ** 2
+                  for m, (mx, my) in zip(modules, measured))
+    return vx, vy, wz, math.sqrt(squares / (2 * n))
+
+
+def _solve3(a: List[List[float]], b: List[float]) -> Tuple[float, float, float]:
+    """Solve a 3 x 3 linear system with Cramer's rule."""
+    def det(m):
+        return (m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+                - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+                + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]))
+    d = det(a)
+    if abs(d) < 1e-12:
+        raise ValueError('wheel layout does not determine the robot motion')
+    return tuple(det([[b[r] if c == k else a[r][c] for c in range(3)] for r in range(3)]) / d
+                 for k in range(3))
+
+
+def integrate_pose(x: float, y: float, yaw: float, vx: float, vy: float, wz: float,
+                   dt: float) -> Tuple[float, float, float]:
+    """
+    Move a 2D pose by a body velocity held for dt seconds (dead reckoning).
+
+    Uses the heading at the middle of the step, which is exact for straight lines and
+    within a fraction of a millimetre per step on curves at 100 Hz.
+    """
+    middle = yaw + wz * dt / 2
+    c, s = math.cos(middle), math.sin(middle)
+    return x + (c * vx - s * vy) * dt, y + (s * vx + c * vy) * dt, yaw + wz * dt
