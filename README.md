@@ -12,9 +12,10 @@ rows on real terrain. ROS 2 Humble and Gazebo Fortress.
 - Gazebo simulation with ros2_control, speed limits and a watchdog
 - Ground-truth pose and velocity from Gazebo
 - Terrain generator: test terrains and the real MuST-C field from drone elevation data
-- Field layout: the 80 plots of the real MuST-C trial, from its official shapefile
+- Field: the 80 plots of the real MuST-C trial from its official shapefile, with
+  generated crop plants (textured leaves, about 22,500 plants)
 
-Next: crop plants, GNSS/IMU localization, coverage planning and LiDAR row following.
+Next: GNSS/IMU localization, coverage planning and LiDAR row following.
 
 ## Quick start
 
@@ -24,6 +25,8 @@ cd agri_ugv_ws
 rosdep install --from-paths src --ignore-src -y
 colcon build --symlink-install
 source install/setup.bash
+ros2 run agri_ugv_field make_plants   # grows the crop plants (about 20 s, 90 MB)
+colcon build --symlink-install --packages-select agri_ugv_gazebo
 ros2 launch agri_ugv_gazebo sim.launch.py world:=must_c_field
 ```
 
@@ -43,7 +46,9 @@ aerial photo (orthophoto) of 17 May 2023: heights resampled to a 0.45 m grid usi
 10th height percentile per cell, gaps outside the field filled, heights relative to the
 field centre; the photo is used as the terrain's texture at 6 cm per pixel.
 The plot layout (`src/agri_ugv_field/data/must_c_field_plots.csv`) comes from the
-dataset's field shapefile (`md_FieldSHP`), placed in the same world frame.
+dataset's field shapefile (`md_FieldSHP`), placed in the same world frame. The crop
+plants in the plots are generated: row spacings and plant sizes are assumed typical
+values, not measured; leaf pictures and plant shapes are drawn by the generator.
 
 - Dataset: Chong, Yue Linn, 2025, "MuST-C Dataset: The Multi-Sensor and Multi-Temporal
   Data Set of Multiple Crops for In-Field Phenotyping and Monitoring",

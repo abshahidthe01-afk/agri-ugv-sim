@@ -23,6 +23,7 @@ setup(
     entry_points={
         'console_scripts': [
             'make_field_layout = agri_ugv_field.make_field_layout:main',
+            'make_plants = agri_ugv_field.make_plants:main',
         ],
     },
 )

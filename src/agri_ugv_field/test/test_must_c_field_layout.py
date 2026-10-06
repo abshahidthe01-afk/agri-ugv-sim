@@ -4,6 +4,7 @@ from collections import Counter
 from pathlib import Path
 
 from agri_ugv_field.layout import read_layout_csv, terrain_origin
+from agri_ugv_field.plants import CROPS
 import numpy as np
 import pytest
 
@@ -29,6 +30,7 @@ def test_80_plots_with_the_published_ids_and_crops(rows):
         'Mixture (faba-wheat)': 4, 'Mixture (faba)': 2, 'Mixture (wheat)': 2}
     by_id = {r['plot_id']: r['crop'] for r in plots}
     assert by_id[198] == 'Sugar Beet'      # the dataset's sample plot
+    assert set(by_id.values()) <= set(CROPS)   # every crop has plant parameters
 
 
 def test_plots_are_6_m_wide_and_7_7_or_8_1_m_long_and_parallel(rows):
