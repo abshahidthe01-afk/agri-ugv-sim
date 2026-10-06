@@ -30,8 +30,9 @@
     </gazebo>
   </xacro:macro>
 
-  <!-- GNSS antenna: a NavSat receiver (no noise yet) publishing latitude, longitude and
-       altitude on /gnss/<name>/fix. Two antennas on the roof also give the heading. -->
+  <!-- GNSS antenna: a NavSat receiver publishing ideal latitude, longitude and altitude on
+       /gnss/<name>/fix_ideal; agri_ugv_localization adds realistic RTK errors (/gnss/<name>/fix)
+       and the heading from the two antennas. -->
   <xacro:macro name="gnss_antenna" params="name x z rate">
     <link name="gnss_${name}_link">
       <visual>                            <!-- antenna puck, its top at the phase centre -->
@@ -49,7 +50,7 @@
       <sensor name="gnss_${name}" type="navsat">
         <always_on>true</always_on>
         <update_rate>${rate}</update_rate>
-        <topic>/gnss/${name}/fix</topic>
+        <topic>/gnss/${name}/fix_ideal</topic>
         <ignition_frame_id>gnss_${name}_link</ignition_frame_id>
       </sensor>
     </gazebo>

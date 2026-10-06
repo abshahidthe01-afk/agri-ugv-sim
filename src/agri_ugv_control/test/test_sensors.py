@@ -45,7 +45,7 @@ def test_gnss_antennas_sit_on_the_roof_1_2_m_apart(name, x):
     [sensor] = [g.find('sensor') for g in root.findall('gazebo')
                 if g.get('reference') == f'gnss_{name}_link']
     assert sensor.get('type') == 'navsat'
-    assert sensor.findtext('topic') == f'/gnss/{name}/fix'
+    assert sensor.findtext('topic') == f'/gnss/{name}/fix_ideal'
     assert sensor.findtext('ignition_frame_id') == f'gnss_{name}_link'
     assert float(sensor.findtext('update_rate')) == 10.0
 
