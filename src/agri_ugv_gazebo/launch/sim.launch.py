@@ -80,4 +80,8 @@ def generate_launch_description():
         # Simulated RTK receiver: ideal fixes + realistic errors, and the dual-antenna heading
         Node(package='agri_ugv_localization', executable='gnss_errors', output='screen',
              parameters=[{'use_sim_time': True}]),
+
+        # Localization: EKF fusing wheel odometry, gyro and both GNSS antennas
+        Node(package='agri_ugv_localization', executable='localization', output='screen',
+             parameters=[{'use_sim_time': True, 'world_file': world_file}]),
     ])

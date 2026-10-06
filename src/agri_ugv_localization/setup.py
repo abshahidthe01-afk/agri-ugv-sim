@@ -20,6 +20,7 @@ setup(
     entry_points={
         'console_scripts': [
             'gnss_errors = agri_ugv_localization.gnss_node:main',
+            'localization = agri_ugv_localization.localization_node:main',
         ],
     },
 )
