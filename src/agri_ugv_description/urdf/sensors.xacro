@@ -3,13 +3,19 @@
      so every world gets them. -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <!-- IMU: accelerometer and gyroscope (no noise yet), published on /imu -->
-  <xacro:macro name="imu_sensor" params="z rate">
-    <link name="imu_link"/>
+  <!-- IMU: accelerometer and gyroscope (no noise yet), published on /imu. Like the real
+       robot's inertial unit, it sits under the roof at the back (Esser et al. 2023). -->
+  <xacro:macro name="imu_sensor" params="x z rate">
+    <link name="imu_link">
+      <visual>
+        <geometry><box size="0.16 0.12 0.06"/></geometry>
+        <material name="scanner_blue"/>
+      </visual>
+    </link>
     <joint name="imu_joint" type="fixed">
       <parent link="base_link"/>
       <child link="imu_link"/>
-      <origin xyz="0 0 ${z}" rpy="0 0 0"/>
+      <origin xyz="${x} 0 ${z}" rpy="0 0 0"/>
     </joint>
     <gazebo reference="imu_link">
       <sensor name="imu" type="imu">
@@ -27,7 +33,13 @@
   <!-- GNSS antenna: a NavSat receiver (no noise yet) publishing latitude, longitude and
        altitude on /gnss/<name>/fix. Two antennas on the roof also give the heading. -->
   <xacro:macro name="gnss_antenna" params="name x z rate">
-    <link name="gnss_${name}_link"/>
+    <link name="gnss_${name}_link">
+      <visual>                            <!-- antenna puck, its top at the phase centre -->
+        <origin xyz="0 0 -0.025" rpy="0 0 0"/>
+        <geometry><cylinder radius="0.07" length="0.05"/></geometry>
+        <material name="module_white"/>
+      </visual>
+    </link>
     <joint name="gnss_${name}_joint" type="fixed">
       <parent link="base_link"/>
       <child link="gnss_${name}_link"/>

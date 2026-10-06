@@ -15,13 +15,13 @@ def model(**args):
     return ElementTree.fromstring(xacro.process_file(str(MODEL_FILE), mappings=args).toxml())
 
 
-def test_imu_sits_on_the_body_near_the_centre_of_mass():
+def test_imu_sits_under_the_roof_at_the_back():
     root = model(controllers_file='x')
     [joint] = [j for j in root.findall('joint') if j.get('name') == 'imu_joint']
     assert joint.get('type') == 'fixed'
     assert joint.find('parent').get('link') == 'base_link'
     x, y, z = (float(v) for v in joint.find('origin').get('xyz').split())
-    assert (x, y, z + 0.205) == pytest.approx((0.0, 0.0, 0.90))   # 0.90 m above the ground
+    assert (x, y, z + 0.205) == pytest.approx((-0.60, 0.0, 1.79))   # 1.79 m above the ground
 
 
 def test_imu_publishes_on_ros_friendly_topic_and_frame():

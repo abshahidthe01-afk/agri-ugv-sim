@@ -62,12 +62,24 @@ not measurements. Sinkage and rolling resistance are not modelled.
 
 | Sensor | Where | Output |
 |---|---|---|
-| IMU (accelerometer, gyroscope) | `imu_link`, on the body 0.90 m above the ground, near the centre of mass (0.894 m) | `/imu`, 100 Hz, no noise yet |
+| IMU (accelerometer, gyroscope) | `imu_link`, under the roof at the back (0.60 m behind the centre, 1.79 m above the ground), like the real robot's inertial unit [2] | `/imu`, 100 Hz, no noise yet |
 | 2 GNSS antennas (NavSat) | `gnss_front_link` / `gnss_rear_link`, on the roof 1.90 m above the ground, 1.20 m apart front to rear | `/gnss/front/fix`, `/gnss/rear/fix`, 10 Hz, no noise yet |
 
 Gazebo uses the SDF default gravity of 9.8 m/s² (the suspension above was sized with 9.81; 0.1 % apart).
 
 In `must_c_field`, `heading_deg` = 1.558: world x/y follow the UTM grid, which here is turned 1.558° from true east/north (meridian convergence). With it, the simulated GNSS reports each terrain point's real coordinates (within 2 cm over the field).
+
+## Phenotyping payload (visual only)
+
+After [2]; no extra mass (it is part of the enclosure's 100 kg) and no collision.
+
+| Part | From the paper | Assumed here |
+|---|---|---|
+| Camera dome | 20 cameras around the robot's centre, aimed at the plant | 3 rings (8 at 0.95 m, 8 at 1.40 m, 4 at 1.72 m) inside the enclosure, aimed at (0, 0, 0.30) |
+| 2 laser line scanners | on the side panels, 1.2 m high, 1.4 m apart, tilted about 50° | 1.34 m apart (inside our 1.5 m box), 50° from vertical, looking across |
+| LED panels | in the enclosure | 4 panels under the roof |
+| Curtains | motorized, front and rear openings | rolled up at the top |
+| 2 computers | on board | on the roof |
 
 ## References
 

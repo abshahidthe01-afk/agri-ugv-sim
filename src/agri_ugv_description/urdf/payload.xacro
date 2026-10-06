@@ -1,0 +1,127 @@
+<?xml version="1.0"?>
+<!-- Phenotyping payload after Esser et al. 2023 (IEEE RA Magazine): a dome of 20 cameras,
+     two laser line scanners on the side panels, LED panels, roll-up curtains and two
+     computers. Visual only: their mass is part of enclosure_mass, and they have no
+     collision. Positions the paper does not state are assumed (docs/robot_spec.md). -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <material name="camera_black"><color rgba="0.08 0.08 0.08 1"/></material>
+  <material name="lens_grey"><color rgba="0.30 0.30 0.32 1"/></material>
+  <material name="led_white"><color rgba="1.0 1.0 0.95 1"/></material>
+  <material name="scanner_blue"><color rgba="0.15 0.25 0.45 1"/></material>
+  <material name="laser_red"><color rgba="0.90 0.10 0.10 1"/></material>
+  <material name="curtain_grey"><color rgba="0.25 0.25 0.25 1"/></material>
+  <material name="computer_grey"><color rgba="0.35 0.35 0.38 1"/></material>
+
+  <!-- A fixed, massless link on base_link at (x, y, z) above the ground: sdformat merges
+       it into the body, keeping its visuals where they are. +x is the viewing direction. -->
+  <xacro:macro name="payload_joint" params="name x y z pitch:=0 yaw:=0">
+    <joint name="${name}_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="${name}_link"/>
+      <origin xyz="${x} ${y} ${z - wheel_radius}" rpy="0 ${pitch} ${yaw}"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- One camera of the dome at (x, y, z), aimed at the plant point (0, 0, target_z) -->
+  <xacro:macro name="dome_camera" params="index x y z target_z">
+    <link name="dome_camera_${index}_link">
+      <visual>
+        <origin xyz="-0.035 0 0" rpy="0 0 0"/>
+        <geometry><box size="0.07 0.13 0.10"/></geometry>
+        <material name="camera_black"/>
+      </visual>
+      <visual>
+        <origin xyz="0.045 0 0" rpy="0 ${pi/2} 0"/>
+        <geometry><cylinder radius="0.04" length="0.09"/></geometry>
+        <material name="lens_grey"/>
+      </visual>
+    </link>
+    <xacro:payload_joint name="dome_camera_${index}" x="${x}" y="${y}" z="${z}"
+                         pitch="${atan2(z - target_z, sqrt(x*x + y*y))}"
+                         yaw="${atan2(-y, -x)}"/>
+  </xacro:macro>
+
+  <!-- count cameras evenly around a ring of the given radius and height -->
+  <xacro:macro name="camera_ring" params="first count radius z target_z offset i:=0">
+    <xacro:dome_camera index="${first + i}" z="${z}" target_z="${target_z}"
+                       x="${radius * cos(offset + 2*pi*i/count)}"
+                       y="${radius * sin(offset + 2*pi*i/count)}"/>
+    <xacro:if value="${i + 1 &lt; count}">
+      <xacro:camera_ring first="${first}" count="${count}" radius="${radius}" z="${z}"
+                         target_z="${target_z}" offset="${offset}" i="${i + 1}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <!-- Laser line scanner on a side panel, looking down and across, tilt from vertical -->
+  <xacro:macro name="line_scanner" params="side y z tilt">
+    <link name="line_scanner_${side}_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><box size="0.10 0.37 0.05"/></geometry>
+        <material name="scanner_blue"/>
+      </visual>
+      <visual>
+        <origin xyz="0.051 0 0" rpy="0 0 0"/>
+        <geometry><box size="0.002 0.25 0.03"/></geometry>
+        <material name="laser_red"/>
+      </visual>
+    </link>
+    <xacro:payload_joint name="line_scanner_${side}" x="0" y="${y}" z="${z}"
+                         pitch="${pi/2 - tilt}" yaw="${-pi/2 if y > 0 else pi/2}"/>
+  </xacro:macro>
+
+  <xacro:macro name="payload" params="roof_z">
+    <xacro:camera_ring first="0"  count="8" radius="0.62" z="0.95" target_z="0.30" offset="${pi/8}"/>
+    <xacro:camera_ring first="8"  count="8" radius="0.55" z="1.40" target_z="0.30" offset="0"/>
+    <xacro:camera_ring first="16" count="4" radius="0.30" z="1.72" target_z="0.30" offset="${pi/4}"/>
+    <!-- 0.67 m from the centre: the tilted body (reaching 5.4 cm sideways) stays inside
+         the panels; the paper's robot has them 1.4 m apart -->
+    <xacro:line_scanner side="left"  y="0.67"  z="1.20" tilt="${radians(50)}"/>
+    <xacro:line_scanner side="right" y="-0.67" z="1.20" tilt="${radians(50)}"/>
+
+    <link name="led_panels_link">
+      <xacro:macro name="led_panel" params="x y">
+        <visual>
+          <origin xyz="${x} ${y} 0" rpy="0 0 0"/>
+          <geometry><box size="0.40 0.20 0.02"/></geometry>
+          <material name="led_white"/>
+        </visual>
+      </xacro:macro>
+      <xacro:led_panel x="0.35"  y="0.45"/>
+      <xacro:led_panel x="0.35"  y="-0.45"/>
+      <xacro:led_panel x="-0.35" y="0.45"/>
+      <xacro:led_panel x="-0.35" y="-0.45"/>
+    </link>
+    <xacro:payload_joint name="led_panels" x="0" y="0" z="${roof_z - 0.03}"/>
+
+    <link name="curtains_link">         <!-- rolled up over the front and rear openings -->
+      <visual>
+        <origin xyz="0.72 0 0" rpy="${pi/2} 0 0"/>
+        <geometry><cylinder radius="0.05" length="1.46"/></geometry>
+        <material name="curtain_grey"/>
+      </visual>
+      <visual>
+        <origin xyz="-0.72 0 0" rpy="${pi/2} 0 0"/>
+        <geometry><cylinder radius="0.05" length="1.46"/></geometry>
+        <material name="curtain_grey"/>
+      </visual>
+    </link>
+    <xacro:payload_joint name="curtains" x="0" y="0" z="${roof_z - 0.07}"/>
+
+    <link name="computers_link">        <!-- two computers on the roof (position assumed) -->
+      <visual>
+        <origin xyz="0 0.35 0" rpy="0 0 0"/>
+        <geometry><box size="0.40 0.30 0.12"/></geometry>
+        <material name="computer_grey"/>
+      </visual>
+      <visual>
+        <origin xyz="0 -0.35 0" rpy="0 0 0"/>
+        <geometry><box size="0.40 0.30 0.12"/></geometry>
+        <material name="computer_grey"/>
+      </visual>
+    </link>
+    <xacro:payload_joint name="computers" x="0" y="0" z="${roof_z + 0.06}"/>
+  </xacro:macro>
+
+</robot>

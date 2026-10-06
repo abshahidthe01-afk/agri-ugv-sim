@@ -54,3 +54,15 @@ def test_robot_is_hard_to_tip_over():
     forwards = math.degrees(math.atan2(half_wheelbase, com_height))
     assert sideways > 35.0
     assert forwards > 35.0
+
+
+def test_centre_of_mass_follows_rotated_joints():
+    urdf = """<robot name="r">
+      <link name="root"><inertial><mass value="2.0"/></inertial></link>
+      <link name="arm"><inertial><origin xyz="1 0 0"/><mass value="2.0"/></inertial></link>
+      <joint name="j" type="fixed"><parent link="root"/><child link="arm"/>
+        <origin xyz="1 0 0" rpy="0 0 1.5707963267948966"/></joint>
+    </robot>"""
+    mass, com = center_of_mass(urdf)          # the arm's mass sits at (1, 1, 0)
+    assert mass == pytest.approx(4.0)
+    assert com == pytest.approx((0.5, 0.5, 0.0))
