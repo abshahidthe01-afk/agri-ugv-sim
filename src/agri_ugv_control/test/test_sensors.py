@@ -54,3 +54,19 @@ def test_the_navsat_system_is_loaded_once():
     root = model(controllers_file='x')
     names = [p.get('filename') for p in root.iter('plugin')]
     assert names.count('ignition-gazebo-navsat-system') == 1
+
+
+@pytest.mark.parametrize('quantity, white, bias, drift', [
+    ('angular_velocity', 0.0005, 0.0003, 2e-5), ('linear_acceleration', 0.005, 0.01, 2e-4)])
+def test_imu_noise_and_biases_on_all_three_axes(quantity, white, bias, drift):
+    root = model(controllers_file='x')
+    [sensor] = [g.find('sensor') for g in root.findall('gazebo')
+                if g.get('reference') == 'imu_link']
+    for axis in 'xyz':
+        noise = sensor.find(f'imu/{quantity}/{axis}/noise')
+        assert noise.get('type') == 'gaussian'
+        assert float(noise.findtext('stddev')) == pytest.approx(white)
+        assert float(noise.findtext('bias_stddev')) == pytest.approx(bias)
+        tau = float(noise.findtext('dynamic_bias_correlation_time'))
+        density = float(noise.findtext('dynamic_bias_stddev'))
+        assert density * (tau / 2) ** 0.5 == pytest.approx(drift)   # Gazebo's long-run spread

@@ -3,8 +3,26 @@
      so every world gets them. -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <!-- IMU: accelerometer and gyroscope (no noise yet), published on /imu. Like the real
-       robot's inertial unit, it sits under the roof at the back (Esser et al. 2023). -->
+  <!-- IMU errors per axis (assumed, typical of an industrial MEMS IMU): white noise per sample,
+       a bias drawn at start-up, and a slowly drifting bias with long-run spread 'drift' and
+       correlation time 'corr_time'. Gazebo's dynamic_bias_stddev is a noise density: its
+       long-run spread is dynamic_bias_stddev * sqrt(corr_time / 2), hence the conversion. -->
+  <xacro:macro name="imu_noise" params="axis white bias drift corr_time">
+    <xacro:element xacro:name="${axis}">
+      <noise type="gaussian">
+        <mean>0</mean>
+        <stddev>${white}</stddev>
+        <bias_mean>0</bias_mean>
+        <bias_stddev>${bias}</bias_stddev>
+        <dynamic_bias_stddev>${drift * sqrt(2.0 / corr_time)}</dynamic_bias_stddev>
+        <dynamic_bias_correlation_time>${corr_time}</dynamic_bias_correlation_time>
+      </noise>
+    </xacro:element>
+  </xacro:macro>
+
+  <!-- IMU: accelerometer and gyroscope with noise and biases, published on /imu. Like the
+       real robot's inertial unit, it sits under the roof at the back (Esser et al. 2023).
+       Its orientation output stays perfect in Gazebo, so the localization does not use it. -->
   <xacro:macro name="imu_sensor" params="x z rate">
     <link name="imu_link">
       <visual>
@@ -23,6 +41,18 @@
         <update_rate>${rate}</update_rate>
         <topic>/imu</topic>
         <ignition_frame_id>imu_link</ignition_frame_id>
+        <imu>
+          <angular_velocity>
+            <xacro:imu_noise axis="x" white="0.0005" bias="0.0003" drift="2e-5" corr_time="300"/>
+            <xacro:imu_noise axis="y" white="0.0005" bias="0.0003" drift="2e-5" corr_time="300"/>
+            <xacro:imu_noise axis="z" white="0.0005" bias="0.0003" drift="2e-5" corr_time="300"/>
+          </angular_velocity>
+          <linear_acceleration>
+            <xacro:imu_noise axis="x" white="0.005" bias="0.01" drift="2e-4" corr_time="300"/>
+            <xacro:imu_noise axis="y" white="0.005" bias="0.01" drift="2e-4" corr_time="300"/>
+            <xacro:imu_noise axis="z" white="0.005" bias="0.01" drift="2e-4" corr_time="300"/>
+          </linear_acceleration>
+        </imu>
       </sensor>
     </gazebo>
     <gazebo>
