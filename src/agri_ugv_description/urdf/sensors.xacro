@@ -24,4 +24,31 @@
     </gazebo>
   </xacro:macro>
 
+  <!-- GNSS antenna: a NavSat receiver (no noise yet) publishing latitude, longitude and
+       altitude on /gnss/<name>/fix. Two antennas on the roof also give the heading. -->
+  <xacro:macro name="gnss_antenna" params="name x z rate">
+    <link name="gnss_${name}_link"/>
+    <joint name="gnss_${name}_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="gnss_${name}_link"/>
+      <origin xyz="${x} 0 ${z}" rpy="0 0 0"/>
+    </joint>
+    <gazebo reference="gnss_${name}_link">
+      <sensor name="gnss_${name}" type="navsat">
+        <always_on>true</always_on>
+        <update_rate>${rate}</update_rate>
+        <topic>/gnss/${name}/fix</topic>
+        <ignition_frame_id>gnss_${name}_link</ignition_frame_id>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+
+  <!-- Gazebo's NavSat system turns positions into latitude and longitude, using the
+       world's <spherical_coordinates> -->
+  <xacro:macro name="gnss_system">
+    <gazebo>
+      <plugin filename="ignition-gazebo-navsat-system" name="ignition::gazebo::systems::NavSat"/>
+    </gazebo>
+  </xacro:macro>
+
 </robot>

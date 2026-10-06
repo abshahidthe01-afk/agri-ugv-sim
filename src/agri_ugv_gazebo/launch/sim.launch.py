@@ -59,7 +59,9 @@ def generate_launch_description():
         Node(package='ros_gz_bridge', executable='parameter_bridge',
              arguments=['/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock',
                         '/ground_truth/odom@nav_msgs/msg/Odometry[ignition.msgs.Odometry',
-                        '/imu@sensor_msgs/msg/Imu[ignition.msgs.IMU']),
+                        '/imu@sensor_msgs/msg/Imu[ignition.msgs.IMU',
+                        '/gnss/front/fix@sensor_msgs/msg/NavSatFix[ignition.msgs.NavSat',
+                        '/gnss/rear/fix@sensor_msgs/msg/NavSatFix[ignition.msgs.NavSat']),
 
         # Controllers: they wait until the robot (and its controller manager) exists
         spawner('joint_state_broadcaster'),

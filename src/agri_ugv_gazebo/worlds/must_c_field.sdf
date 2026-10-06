@@ -19,15 +19,19 @@
     <plugin filename="ignition-gazebo-scene-broadcaster-system"
             name="ignition::gazebo::systems::SceneBroadcaster"/>
 
-    <!-- The world origin is a real place: x points east, y north. Simulated GNSS receivers
-         report these coordinates at x = y = 0; elevation = the terrain's reference height. -->
+    <!-- The world origin is a real place: UTM zone 32N E 357472.44 N 5610188.04, the centre
+         of the must_c_field terrain; elevation = the terrain's reference height. World x and
+         y follow the UTM grid (east, north), which here is turned 1.558 degrees anticlockwise
+         from true east/north (meridian convergence). heading_deg tells Gazebo, so simulated
+         GNSS receivers report each terrain point's real coordinates (within 2 cm over the
+         field; the UTM scale factor here is 0.99985). -->
     <spherical_coordinates>
       <surface_model>EARTH_WGS84</surface_model>
       <world_frame_orientation>ENU</world_frame_orientation>
-      <latitude_deg>50.6261275</latitude_deg>
-      <longitude_deg>6.9848832</longitude_deg>
+      <latitude_deg>50.626127482</latitude_deg>
+      <longitude_deg>6.984883225</longitude_deg>
       <elevation>221.845</elevation>
-      <heading_deg>0</heading_deg>
+      <heading_deg>1.558</heading_deg>
     </spherical_coordinates>
 
     <light type="directional" name="sun">

@@ -63,8 +63,11 @@ not measurements. Sinkage and rolling resistance are not modelled.
 | Sensor | Where | Output |
 |---|---|---|
 | IMU (accelerometer, gyroscope) | `imu_link`, on the body 0.90 m above the ground, near the centre of mass (0.894 m) | `/imu`, 100 Hz, no noise yet |
+| 2 GNSS antennas (NavSat) | `gnss_front_link` / `gnss_rear_link`, on the roof 1.90 m above the ground, 1.20 m apart front to rear | `/gnss/front/fix`, `/gnss/rear/fix`, 10 Hz, no noise yet |
 
 Gazebo uses the SDF default gravity of 9.8 m/s² (the suspension above was sized with 9.81; 0.1 % apart).
+
+In `must_c_field`, `heading_deg` = 1.558: world x/y follow the UTM grid, which here is turned 1.558° from true east/north (meridian convergence). With it, the simulated GNSS reports each terrain point's real coordinates (within 2 cm over the field).
 
 ## References
 
