@@ -7,15 +7,20 @@ in the lane at the plot's end. Plot rows are served from their wider neighbourin
 and taken in a serpentine; changing plot rows goes around the end of the plot block.
 In the lanes the tyres keep a clearance from the plot ends where there is room for it;
 where a lane is narrower, the robot moves in its middle, measured at each plot's end.
+In row crops the passes are placed so that the wheels run between the crop rows.
 """
 
 import math
 
+from agri_ugv_field.plants import CROPS, row_offsets
 import numpy as np
 
 ROBOT_HALF_WIDTH = 0.84       # [m] wheel centre to the outer tyre edge, plus a little
 ROBOT_HALF_LENGTH = 0.76      # [m] centre to the tyre edge along the rows (tyres steered across)
 ROW_GAP = 3.0                 # [m] plot centres further apart across the field: next plot row
+# [m] least distance from a wheel's centre to a crop row: half a tyre (0.0825), the stems
+# (0.03) and 3 cm for steering errors
+WHEEL_TO_ROW = 0.14
 
 
 def field_frame(boundary):
@@ -136,15 +141,84 @@ def lane_stop(plot, offsets, side, field, clearance):
                                f'at the end of plot {plot["plot_id"]}')
 
 
+def even_offsets(width, n, track=1.5):
+    """Return n pass centre lines spread evenly, the outer wheels on the plot's edges."""
+    if n == 1:
+        return [0.0]
+    edge = (width - track) / 2
+    return sorted(-edge + k * 2 * edge / (n - 1) for k in range(n))
+
+
 def pass_offsets(width, track=1.5, slack=0.05):
     """
     Return evenly spaced pass centre lines across a plot (the simple, row-blind way).
 
     As many passes as needed to cover the width with the track, allowing 'slack' metres
-    left over (plots measure 5.98-6.02 m: a 2 cm sliver is not worth a fifth pass).
+    left over (plots measure 5.98-6.02 m: a 2 cm sliver is not worth a fifth pass), and an
+    even number of them, so that the robot leaves every plot into the lane it came from.
     """
     n = max(1, math.ceil((width - slack) / track))
-    return [(k - (n - 1) / 2) * width / n for k in range(n)]
+    return even_offsets(width, n + n % 2, track)
+
+
+def wheel_room(offset, rows, track=1.5):
+    """Return how far the nearer of a pass's two wheels runs from the closest crop row."""
+    wheels = np.array([offset - track / 2, offset + track / 2])
+    return float(np.min(np.abs(np.asarray(rows)[None, :] - wheels[:, None])))
+
+
+def covers(offsets, width, track=1.5, slack=0.05):
+    """Tell whether the passes' tracks leave at most 'slack' metres of the width uncovered."""
+    o = sorted(offsets)
+    gaps = [max(0.0, b - a - track) for a, b in zip(o, o[1:])]
+    ends = max(0.0, o[0] - track / 2 + width / 2) + max(0.0, width / 2 - o[-1] - track / 2)
+    return sum(gaps) + ends <= slack + 1e-9
+
+
+def row_aware_offsets(width, rows, track=1.5, slack=0.05, room=WHEEL_TO_ROW):
+    """
+    Return pass centre lines across a plot of row crops, the wheels between the rows.
+
+    rows are the crop rows' offsets across the plot. Starting from evenly spread passes,
+    each pass moves (by at most half a row spacing) to where its wheels are furthest from
+    the rows. If a wheel stays closer than 'room' to a row, or the passes no longer cover
+    the plot, two more passes are tried (twice at most); failing that, the covering set
+    whose wheels keep furthest from the rows.
+    """
+    rows = np.sort(np.asarray(rows, dtype=float))
+    half = (float(np.min(np.diff(rows))) if len(rows) > 1 else width) / 2
+    # where the room can be largest: the two wheels equally far from a row each, or one
+    # wheel halfway between two rows
+    peaks = [(a + b) / 2 for a in rows for b in rows] + \
+        [(a + b) / 2 + side * track / 2 for a, b in zip(rows, rows[1:]) for side in (-1, 1)]
+    count = len(pass_offsets(width, track, slack))
+    best, best_room = even_offsets(width, count, track), -math.inf
+    for n in (count, count + 2, count + 4):
+        offsets = []
+        for even in even_offsets(width, n, track):
+            near = [even, even - half, even + half] + [t for t in peaks if abs(t - even) <= half]
+            offsets.append(max(near, key=lambda o: (round(wheel_room(o, rows, track), 9),
+                                                    -abs(o - even))))
+        least = min(wheel_room(o, rows, track) for o in offsets)
+        if covers(offsets, width, track, slack):
+            if least >= room:
+                return offsets
+            if least > best_room:
+                best, best_room = offsets, least
+    return best
+
+
+def plot_offsets(plot, track=1.5, slack=0.05):
+    """
+    Return a plot's pass centre lines: evenly spaced in cereals, else between the crop rows.
+
+    The rows are taken as sown, in the pattern of the generated plants (agri_ugv_field.plants).
+    """
+    crop = CROPS.get(plot['crop'])
+    if crop is None or crop['shape'] == 'cereal':
+        return pass_offsets(plot['width'], track, slack)
+    return row_aware_offsets(plot['width'], row_offsets(plot['width'], crop['rows']), track,
+                             slack)
 
 
 def point_on_lane(plot, offset, lane, frame):
@@ -207,7 +281,7 @@ def plan_mission(plots, boundary, clearance=0.3, track=1.5, field=None):
         lane = here
         for plot in order:
             c, u, v = plot_axes(plot)
-            offsets = sorted(pass_offsets(plot['width'], track), key=lambda o: (v * o) @ along)
+            offsets = sorted(plot_offsets(plot, track), key=lambda o: (v * o) @ along)
             if not eastwards:
                 offsets = offsets[::-1]
             towards_home = 1 if home * (u @ across) > 0 else -1   # the plot's end at home

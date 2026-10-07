@@ -50,9 +50,9 @@ def test_the_whole_field_is_planned_as_before(layout):
     segments, heading, plot_ids = load_plan(layout)
     assert len(plot_ids) == 80 and math.degrees(heading) == pytest.approx(84.55, abs=0.01)
     counts = {kind: n for kind, (n, _) in summary(segments).items()}
-    assert counts == {'pass': 320, 'shift': 240, 'transfer': 83}
+    assert counts == {'pass': 336, 'shift': 256, 'transfer': 83}     # 6 passes in soybean
     assert sum(length for _, length in summary(segments).values()) == \
-        pytest.approx(3868.9, abs=0.1)
+        pytest.approx(4025.4, abs=0.1)
 
 
 def test_one_plot_is_passed_exactly_where_the_whole_mission_passes_it(layout):

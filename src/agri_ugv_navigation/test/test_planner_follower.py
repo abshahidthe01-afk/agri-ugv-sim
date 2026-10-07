@@ -2,9 +2,11 @@
 
 import math
 
+from agri_ugv_field.plants import row_offsets
 from agri_ugv_navigation.follower import follow
-from agri_ugv_navigation.planner import (field_frame, lane_widths, pass_offsets, plan_mission,
-                                         plot_rows)
+from agri_ugv_navigation.planner import (covers, field_frame, lane_widths, pass_offsets,
+                                         plan_mission, plot_offsets, plot_rows,
+                                         row_aware_offsets, wheel_room)
 import numpy as np
 import pytest
 
@@ -41,10 +43,30 @@ def clearance(segments, plots, kinds=('shift', 'transfer')):
 
 
 @pytest.mark.parametrize('width, expected', [(6.0, [-2.25, -0.75, 0.75, 2.25]),
-                                             (6.02, [-2.2575, -0.7525, 0.7525, 2.2575]),
-                                             (3.0, [-0.75, 0.75])])
-def test_passes_cover_the_plot_without_a_pass_for_a_sliver(width, expected):
-    assert pass_offsets(width) == pytest.approx(expected)
+                                             (6.02, [-2.26, -0.75333, 0.75333, 2.26]),
+                                             (3.0, [-0.75, 0.75]),
+                                             (4.5, [-1.5, -0.5, 0.5, 1.5])])
+def test_passes_cover_the_plot_in_an_even_number_without_one_for_a_sliver(width, expected):
+    assert pass_offsets(width) == pytest.approx(expected, abs=1e-5)
+    assert covers(pass_offsets(width), width)
+
+
+def test_wheels_run_between_the_rows_of_row_crops():
+    """Soybean rows 0.45 m apart: no 4 passes of a 1.5 m track keep off the rows, 6 do."""
+    soy = plot_offsets({'crop': 'Soybean', 'width': 6.0})
+    assert soy == pytest.approx([-2.325, -1.35, -0.45, 0.45, 1.35, 2.325])
+    rows = row_offsets(6.0, 0.45)
+    assert min(wheel_room(o, rows) for o in soy) == pytest.approx(0.15)
+    assert covers(soy, 6.0)
+    for crop in ('Sugar Beet', 'Potato'):          # rows 0.5 and 0.75 m apart: already clear
+        assert plot_offsets({'crop': crop, 'width': 6.0}) == pytest.approx(pass_offsets(6.0))
+    assert plot_offsets({'crop': 'Summerwheat', 'width': 6.02}) == pass_offsets(6.02)
+
+
+def test_rows_too_close_for_the_wheels_still_give_covering_passes():
+    rows = np.arange(-2.95, 3.0, 0.1)               # 0.1 m apart: no room for a tyre
+    offsets = row_aware_offsets(6.0, rows)
+    assert covers(offsets, 6.0) and len(offsets) in (4, 6, 8)
 
 
 def test_plots_are_grouped_into_rows_and_lanes_found():
