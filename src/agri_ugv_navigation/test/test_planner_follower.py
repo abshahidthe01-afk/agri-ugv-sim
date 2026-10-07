@@ -80,3 +80,23 @@ def test_the_follower_drives_backwards_and_crabs_without_turning():
     assert done and y == pytest.approx(-6.0, abs=0.03) and yaw == pytest.approx(math.pi / 2)
     x, y, yaw, done = drive((0.0, 0.0, math.pi / 2), (0.0, 0.0), (1.5, 0.0), math.pi / 2)
     assert done and x == pytest.approx(1.5, abs=0.03) and yaw == pytest.approx(math.pi / 2)
+
+
+def test_a_block_of_plots_uses_the_lanes_of_the_whole_field():
+    """Plot 11 alone: its passes end in the field's lanes (y 11 and 0), not 1 m past it."""
+    def pass_ends(segments):
+        return sorted({round(y, 9) for s in segments if s['kind'] == 'pass'
+                       for y in (s['start'][1], s['end'][1])})
+    assert pass_ends(plan_mission(PLOTS[1:2], BOUNDARY, field=PLOTS)[0]) == [0.0, 11.0]
+    assert pass_ends(plan_mission(PLOTS[1:2], BOUNDARY)[0]) == [1.0, 11.0]
+
+
+def test_a_block_over_two_plot_rows_goes_around_the_end_of_the_field():
+    segments, _ = plan_mission([PLOTS[1], PLOTS[4]], BOUNDARY, field=PLOTS)
+    assert sorted({s['plot_id'] for s in segments if s['kind'] == 'pass'}) == [11, 21]
+    beyond = 7.5 + 10.5 + 0.84 + 0.8                 # past the field's last plot, not plot 11
+    corners = [s['end'] for s in segments if s['kind'] == 'transfer']
+    assert corners[0] == pytest.approx((beyond, 11.0))
+    assert corners[1] == pytest.approx((beyond, -11.0))
+    with pytest.raises(ValueError, match='not part of the field'):
+        plan_mission([plot(99, 0.0, 0.0)], BOUNDARY, field=PLOTS)

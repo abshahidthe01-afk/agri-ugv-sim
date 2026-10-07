@@ -54,3 +54,25 @@ def test_moving_robot_brakes_gently_before_it_steers():
                                      RADIUS, LIMITS, 0.02, 0.05)
     assert velocity == pytest.approx((0.48, 0.0, 0.0))           # braking at 1 m/s^2
     assert [c.steer_angle for c in commands] == pytest.approx(STRAIGHT)   # still straight
+
+
+def test_a_mixed_command_speeds_up_with_the_wheels_at_its_angles():
+    """Ramping together keeps the command's wheel angles; ramping apart points them at 45 deg."""
+    target = (0.5, 0.03, 0.0)
+    aim = [c.steer_angle for c in inverse_kinematics(*target, MODULES, RADIUS)]
+    _, commands = steer_first(target, (0.0, 0.0, 0.0), aim, MODULES, RADIUS, LIMITS, 0.02, 0.05)
+    assert [c.steer_angle for c in commands] == pytest.approx(aim)
+    _, commands = steer_first(target, (0.0, 0.0, 0.0), aim, MODULES, RADIUS, LIMITS, 0.02, 0.05,
+                              together=False)
+    assert [c.steer_angle for c in commands] == pytest.approx([math.pi / 4] * 4)
+
+
+def test_a_small_correction_while_crabbing_does_not_stop_the_robot_with_a_margin():
+    crab = [math.pi / 2] * 4
+    velocity, commands = steer_first((-0.01, 0.5, 0.0), (0.0, 0.5, 0.0), crab, MODULES, RADIUS,
+                                     LIMITS, 0.02, 0.05, margin=0.15)
+    assert velocity == pytest.approx((-0.01, 0.5, 0.0))
+    assert [c.steer_angle for c in commands] == pytest.approx(crab)
+    velocity, _ = steer_first((-0.01, 0.5, 0.0), (0.0, 0.5, 0.0), crab, MODULES, RADIUS, LIMITS,
+                              0.02, 0.05)
+    assert velocity == pytest.approx((0.0, 0.48, 0.0))     # brakes to swing the wheels round

@@ -34,6 +34,12 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'soil', default_value='rigid',
             description='Soil profile: rigid (no slip model), firm, soft or wet'),
+        # Where to put the robot (default: the world origin, 10 cm above the ground there)
+        DeclareLaunchArgument('x', default_value='0.0', description='Robot start x [m]'),
+        DeclareLaunchArgument('y', default_value='0.0', description='Robot start y [m]'),
+        DeclareLaunchArgument('z', default_value='0.1', description='Robot start height [m]'),
+        DeclareLaunchArgument('yaw', default_value='0.0',
+                              description='Robot start heading [rad], anticlockwise from x'),
 
         # Let Gazebo find our generated terrain models (model://<name>) in the models folder
         AppendEnvironmentVariable(
@@ -49,9 +55,11 @@ def generate_launch_description():
         Node(package='robot_state_publisher', executable='robot_state_publisher',
              parameters=[{'robot_description': robot_description, 'use_sim_time': True}]),
 
-        # Put the robot into the world, 10 cm above the ground
+        # Put the robot into the world at the start pose; it drops onto the ground
         Node(package='ros_gz_sim', executable='create', output='screen',
-             arguments=['-topic', 'robot_description', '-name', 'agri_ugv', '-z', '0.1']),
+             arguments=['-topic', 'robot_description', '-name', 'agri_ugv',
+                        '-x', LaunchConfiguration('x'), '-y', LaunchConfiguration('y'),
+                        '-z', LaunchConfiguration('z'), '-Y', LaunchConfiguration('yaw')]),
 
         # Bridge Gazebo -> ROS ('[' means one direction only, Gazebo to ROS):
         # - the simulation clock, so ROS programs run on simulation time

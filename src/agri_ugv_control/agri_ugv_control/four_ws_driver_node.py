@@ -16,6 +16,10 @@ Parameters:  max_linear_x, max_linear_y [m/s], max_angular_z [rad/s],
              max_accel_x, max_accel_y [m/s^2], max_accel_z [rad/s^2]
              wait_for_steering (true): steer first, roll only when the wheels point
              within steer_tolerance [rad] of the new angles (avoids skidding wheels)
+             ramp_together (true): speed up and brake in all directions together, so
+             the wheels keep their angles meanwhile (false: each direction on its own)
+             limit_margin [rad] (0.15): a wheel asked to point this little past its
+             +-90 deg steering limit stays at the limit instead of swinging round
 """
 
 from agri_ugv_control.kinematics import inverse_kinematics
@@ -50,6 +54,8 @@ class FourWsDriver(Node):
         )
         self.get_logger().info(f'Velocity limits: {self.limits}')
         self.declare_parameter('wait_for_steering', True)        # read every cycle
+        self.declare_parameter('ramp_together', True)            # read every cycle
+        self.declare_parameter('limit_margin', 0.15)             # read every cycle
         self.tolerance = self.declare_parameter('steer_tolerance', 0.05).value   # [rad]
         self.measured = None     # measured steering angle per module, from /joint_states
 
@@ -113,13 +119,17 @@ class FourWsDriver(Node):
 
         # Limiter: cap the speed and ramp towards it (also makes watchdog stops gradual).
         # With wait_for_steering, wheels only roll once they point the right way.
+        together = self.get_parameter('ramp_together').value
+        margin = self.get_parameter('limit_margin').value
         if self.get_parameter('wait_for_steering').value and self.measured is not None:
             self.velocity, commands = steer_first(
                 target, self.velocity, self.measured, self.modules, self.wheel_radius,
-                self.limits, self.dt, self.tolerance)
+                self.limits, self.dt, self.tolerance, together, margin)
         else:
-            self.velocity = limit_velocity(target, self.velocity, self.limits, self.dt)
-            commands = inverse_kinematics(*self.velocity, self.modules, self.wheel_radius)
+            self.velocity = limit_velocity(target, self.velocity, self.limits, self.dt,
+                                           together)
+            commands = inverse_kinematics(*self.velocity, self.modules, self.wheel_radius,
+                                          margin)
         for i, cmd in enumerate(commands):
             if cmd.steer_angle is not None:
                 self.steer_angles[i] = cmd.steer_angle

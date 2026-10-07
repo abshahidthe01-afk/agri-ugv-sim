@@ -126,3 +126,23 @@ def test_integrating_a_constant_turn_closes_the_circle():
 def test_integrating_sideways_motion_follows_the_heading():
     assert integrate_pose(1.0, 2.0, math.pi / 2, 0.0, 0.5, 0.0, 2.0) == pytest.approx(
         (0.0, 2.0, math.pi / 2))
+
+
+def test_a_wheel_just_past_its_limit_stays_there_with_a_margin():
+    """Crabbing left with a slight backward part: the wheels stay at +90 deg."""
+    past = math.atan2(0.01, 0.5)
+    for cmd in inverse_kinematics(-0.01, 0.5, 0.0, MODULES, WHEEL_RADIUS, margin=0.15):
+        assert cmd.steer_angle == pytest.approx(math.pi / 2)
+        assert cmd.wheel_speed == pytest.approx(0.5 / WHEEL_RADIUS)    # the part along it
+    for cmd in inverse_kinematics(-0.01, 0.5, 0.0, MODULES, WHEEL_RADIUS):   # no margin
+        assert cmd.steer_angle == pytest.approx(-math.pi / 2 + past)       # swung round
+        assert cmd.wheel_speed < 0
+
+
+def test_a_wheel_further_past_its_limit_than_the_margin_still_swings_round():
+    angle = math.atan2(0.5, -0.2)                   # 22 deg past the limit
+    for cmd in inverse_kinematics(-0.2, 0.5, 0.0, MODULES, WHEEL_RADIUS, margin=0.15):
+        assert cmd.steer_angle == pytest.approx(angle - math.pi)
+        assert cmd.wheel_speed == pytest.approx(-math.hypot(0.2, 0.5) / WHEEL_RADIUS)
+    with pytest.raises(ValueError):
+        inverse_kinematics(0.5, 0.0, 0.0, MODULES, WHEEL_RADIUS, margin=-0.1)

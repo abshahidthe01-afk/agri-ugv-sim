@@ -29,13 +29,17 @@ class WheelCommand:
 
 def inverse_kinematics(vx: float, vy: float, wz: float,
                        modules: List[WheelModule],
-                       wheel_radius: float) -> List[WheelCommand]:
+                       wheel_radius: float, margin: float = 0.0) -> List[WheelCommand]:
     """
     Convert a robot velocity into a steering angle and spin speed per wheel.
 
     vx, vy: robot velocity forward and to the left [m/s]
     wz:     robot turn rate, counter-clockwise [rad/s]
+    margin: [rad] a wheel that should point up to this far past its +-90 deg
+            steering limit stays at the limit (see below); 0 = exact motion
     """
+    if margin < 0:
+        raise ValueError(f'margin must not be negative, got {margin}')
     commands = []
     for m in modules:
         # Velocity of this wheel = robot motion + extra motion from the rotation
@@ -52,11 +56,16 @@ def inverse_kinematics(vx: float, vy: float, wz: float,
 
         # Steering joints turn at most +-90 deg. Beyond that, point the wheel
         # the opposite way and spin it backwards: same motion on the ground.
-        if angle > math.pi / 2:
-            angle -= math.pi
-            speed = -speed
-        elif angle < -math.pi / 2:
-            angle += math.pi
+        # Just past the limit (within margin), keep the wheel at the limit and
+        # roll it at the part of the speed along it; the small rest is left out.
+        # Crabbing at 90 deg, a tiny correction would otherwise swing the wheel
+        # round by 180 deg, every time its sign changes.
+        past = abs(angle) - math.pi / 2
+        if 0 < past <= margin:
+            angle = math.copysign(math.pi / 2, angle)
+            speed *= math.cos(past)
+        elif past > 0:
+            angle -= math.copysign(math.pi, angle)
             speed = -speed
 
         commands.append(WheelCommand(steer_angle=angle, wheel_speed=speed / wheel_radius))

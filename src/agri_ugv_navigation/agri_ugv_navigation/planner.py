@@ -80,20 +80,29 @@ def point_on_lane(plot, offset, lane, frame):
     return base + t * u
 
 
-def plan_mission(plots, boundary, headland=1.0, track=1.5):
+def plan_mission(plots, boundary, headland=1.0, track=1.5, field=None):
     """
     Return the mission as a list of straight segments to drive in order.
 
     Each segment is a dict: kind ('pass', 'shift' between passes, 'transfer' between plots
     or plot rows), start and end (world x, y), and plot_id for passes. The heading stays
-    the plots' mean row direction throughout.
+    the plots' mean row direction throughout. field lists all plots of the trial when
+    'plots' is only a part of it: lanes and the way around the block's end then come from
+    the whole field, so a mission over a few plots drives where the full mission would
+    (and not into the neighbouring plots).
     """
+    field = plots if field is None else field
+    missing = {p['plot_id'] for p in plots} - {p['plot_id'] for p in field}
+    if missing:
+        raise ValueError(f'plots {sorted(missing)} are not part of the field')
+    chosen = {p['plot_id'] for p in plots}
     frame = field_frame(boundary)
     centre, along, across = frame
-    rows = plot_rows(plots, frame)
+    rows = plot_rows(field, frame)
     lane_lines, lane_widths = lanes(rows, frame, headland)
-    block_end = max(abs((plot_axes(p)[0] - centre) @ along) + p['width'] / 2 for p in plots)
+    block_end = max(abs((plot_axes(p)[0] - centre) @ along) + p['width'] / 2 for p in field)
     beyond = block_end + ROBOT_HALF_WIDTH + 0.8           # around the block's end
+    served = 0
     points, segments = [], []
 
     def go(kind, end, plot_id=None):
@@ -104,9 +113,13 @@ def plan_mission(plots, boundary, headland=1.0, track=1.5):
         points.append(np.asarray(end, dtype=float))
 
     for r, row in enumerate(rows):
+        row = [p for p in row if p['plot_id'] in chosen]
+        if not row:
+            continue
         wide = 0 if lane_widths[r] >= lane_widths[r + 1] else 1
         home, far = lane_lines[r + wide], lane_lines[r + 1 - wide]
-        eastwards = r % 2 == 0
+        eastwards = served % 2 == 0
+        served += 1
         order = row if eastwards else row[::-1]
         if points and abs((points[-1] - centre) @ across - home) > 1e-6:   # change lane
             side = math.copysign(beyond, (points[-1] - centre) @ along)

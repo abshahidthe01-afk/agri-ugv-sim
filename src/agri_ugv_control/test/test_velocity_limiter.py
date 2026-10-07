@@ -47,3 +47,17 @@ def test_no_overshoot():
         assert velocity[1] >= -0.3 - 1e-12
         assert velocity[2] <= 0.2 + 1e-12
     assert velocity == pytest.approx((0.7, -0.3, 0.2))
+
+
+def test_components_ramp_together_and_keep_the_direction():
+    """A forward command with a small sideways part keeps its direction while speeding up."""
+    target = (0.5, 0.02, 0.01)
+    velocity = limit_velocity(target, (0.0, 0.0, 0.0), LIMITS, DT)
+    assert velocity == pytest.approx((0.02, 0.0008, 0.0004))      # 4 % of the way
+    assert run(target, (0.0, 0.0, 0.0), 0.5) == pytest.approx(target)
+
+
+def test_components_on_their_own_reach_a_small_part_at_once():
+    """Ramping each component separately reaches the small parts first: 45 deg sideways."""
+    velocity = limit_velocity((0.5, 0.02, 0.01), (0.0, 0.0, 0.0), LIMITS, DT, together=False)
+    assert velocity == pytest.approx((0.02, 0.02, 0.01))

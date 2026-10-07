@@ -17,8 +17,8 @@ def steering_misalignment(targets: List[Optional[float]], measured: List[float])
 
 def steer_first(target: Tuple[float, float, float], velocity: Tuple[float, float, float],
                 measured: List[float], modules: List[WheelModule], wheel_radius: float,
-                limits: VelocityLimits, dt: float,
-                tolerance: float) -> Tuple[Tuple[float, float, float], List[WheelCommand]]:
+                limits: VelocityLimits, dt: float, tolerance: float, together: bool = True,
+                margin: float = 0.0) -> Tuple[Tuple[float, float, float], List[WheelCommand]]:
     """
     Return the next (velocity, wheel commands) for a commanded target velocity.
 
@@ -26,13 +26,14 @@ def steer_first(target: Tuple[float, float, float], velocity: Tuple[float, float
     drives as usual (speed and acceleration limited). If not, it first brakes (limited)
     and, once standing, turns the wheels to the new angles with the wheels not rolling.
     Rolling wheels that point the wrong way would skid and corrupt the wheel odometry.
+    together and margin are passed on to limit_velocity and inverse_kinematics.
     """
-    aim = inverse_kinematics(*target, modules, wheel_radius)
+    aim = inverse_kinematics(*target, modules, wheel_radius, margin)
     if steering_misalignment([c.steer_angle for c in aim], measured) <= tolerance:
-        velocity = limit_velocity(target, velocity, limits, dt)
-        return velocity, inverse_kinematics(*velocity, modules, wheel_radius)
+        velocity = limit_velocity(target, velocity, limits, dt, together)
+        return velocity, inverse_kinematics(*velocity, modules, wheel_radius, margin)
     if max(abs(v) for v in velocity) > STOPPED:
-        velocity = limit_velocity((0.0, 0.0, 0.0), velocity, limits, dt)   # brake first
-        return velocity, inverse_kinematics(*velocity, modules, wheel_radius)
+        velocity = limit_velocity((0.0, 0.0, 0.0), velocity, limits, dt, together)   # brake
+        return velocity, inverse_kinematics(*velocity, modules, wheel_radius, margin)
     return (0.0, 0.0, 0.0), [WheelCommand(steer_angle=c.steer_angle, wheel_speed=0.0)
                              for c in aim]
