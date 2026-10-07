@@ -11,6 +11,8 @@
   <xacro:arg name="controllers_file" default=""/>
   <!-- Soil profile in Gazebo: rigid (default, no slip model), firm, soft or wet (soil.xacro) -->
   <xacro:arg name="soil" default="rigid"/>
+  <!-- The 3D LiDAR on the roof (sensors.xacro); false leaves it out, e.g. to save rendering -->
+  <xacro:arg name="lidar" default="true"/>
   <!-- ============ Dimensions (sources: docs/robot_spec.md) ============ -->
   <xacro:property name="track"           value="1.50"/>   <!-- left-right wheel spacing -->
   <xacro:property name="wheelbase"       value="1.35"/>   <!-- front-rear steering axes -->
@@ -249,6 +251,12 @@
   <xacro:gnss_antenna name="front" x="${gnss_baseline/2}"  z="${gnss_height - wheel_radius}" rate="10"/>
   <xacro:gnss_antenna name="rear"  x="${-gnss_baseline/2}" z="${gnss_height - wheel_radius}" rate="10"/>
   <xacro:gnss_system/>
+  <xacro:property name="lidar_height" value="2.70"/>  <!-- optical centre above ground, on a mast -->
+  <xacro:if value="$(arg lidar)">
+    <xacro:lidar_sensor z="${lidar_height - wheel_radius}" mast_bottom="${box_top_z - wheel_radius}"
+                        rate="10"/>
+    <xacro:rendering_system/>
+  </xacro:if>
 
   <!-- ============ Phenotyping payload, visual only (payload.xacro) ============ -->
   <xacro:payload roof_z="${box_top_z}"/>

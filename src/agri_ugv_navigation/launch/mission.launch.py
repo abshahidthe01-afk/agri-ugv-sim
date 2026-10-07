@@ -4,6 +4,7 @@ Start the field simulation with the robot at the start of a coverage mission, an
     ros2 launch agri_ugv_navigation mission.launch.py plots:=198
 
 plots: plot_IDs separated by commas, e.g. 178,177,198,197 (default: the whole field).
+lidar: true (default) or false, with or without the 3D LiDAR on the roof.
 The robot is placed where the mission begins, facing along the crop rows; the mission
 node then waits for /mission/start (std_srvs/Trigger).
 """
@@ -46,6 +47,7 @@ def mission(context):
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(gazebo, 'launch', 'sim.launch.py')),
             launch_arguments={'world': 'must_c_field', 'soil': LaunchConfiguration('soil'),
+                              'lidar': LaunchConfiguration('lidar'),
                               'x': f'{x:.3f}', 'y': f'{y:.3f}', 'z': f'{z:.3f}',
                               'yaw': f'{yaw:.5f}'}.items()),
         Node(package='agri_ugv_navigation', executable='mission', output='screen',
@@ -59,5 +61,7 @@ def generate_launch_description():
                               description='plot_IDs separated by commas (empty: all plots)'),
         DeclareLaunchArgument('soil', default_value='rigid',
                               description='Soil profile: rigid, firm, soft or wet'),
+        DeclareLaunchArgument('lidar', default_value='true',
+                              description='true: with the 3D LiDAR on the roof, false: without'),
         OpaqueFunction(function=mission),
     ])

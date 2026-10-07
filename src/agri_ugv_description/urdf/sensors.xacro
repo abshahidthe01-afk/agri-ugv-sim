@@ -94,4 +94,73 @@
     </gazebo>
   </xacro:macro>
 
+  <!-- 3D LiDAR for driving: a spinning LiDAR like an Ouster OS0-64 (64 beams over a 90 deg
+       vertical view, 1024 points per turn) on a mast on the roof. It is an addition to the
+       robot of Esser et al. 2023, which is driven by hand. The passes go forwards and
+       backwards, so it looks all around; the mast lifts it high enough that its lowest
+       beams (45 deg down) pass over the roof edges ahead, behind and to the sides. The point
+       cloud (sensor frame lidar_link) is published on /lidar/points; range noise assumed. -->
+  <xacro:macro name="lidar_sensor" params="z mast_bottom rate">
+    <link name="lidar_link">
+      <visual>                            <!-- sensor housing -->
+        <geometry><cylinder radius="0.043" length="0.07"/></geometry>
+        <material name="camera_black"/>
+      </visual>
+      <visual>                            <!-- mast, down to the roof -->
+        <origin xyz="0 0 ${-(z - mast_bottom) / 2}" rpy="0 0 0"/>
+        <geometry><cylinder radius="0.02" length="${z - mast_bottom}"/></geometry>
+        <material name="computer_grey"/>
+      </visual>
+    </link>
+    <joint name="lidar_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="lidar_link"/>
+      <origin xyz="0 0 ${z}" rpy="0 0 0"/>
+    </joint>
+    <gazebo reference="lidar_link">
+      <sensor name="lidar" type="gpu_lidar">
+        <always_on>true</always_on>
+        <update_rate>${rate}</update_rate>
+        <topic>/lidar</topic>
+        <ignition_frame_id>lidar_link</ignition_frame_id>
+        <visualize>false</visualize>
+        <lidar>
+          <scan>
+            <horizontal>
+              <samples>1024</samples>
+              <resolution>1</resolution>
+              <min_angle>${-pi}</min_angle>
+              <max_angle>${pi - 2 * pi / 1024}</max_angle>
+            </horizontal>
+            <vertical>
+              <samples>64</samples>
+              <resolution>1</resolution>
+              <min_angle>${-pi / 4}</min_angle>
+              <max_angle>${pi / 4}</max_angle>
+            </vertical>
+          </scan>
+          <range>
+            <min>0.3</min>
+            <max>50.0</max>
+            <resolution>0.001</resolution>
+          </range>
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>0.01</stddev>
+          </noise>
+        </lidar>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+
+  <!-- Gazebo's Sensors system renders the camera-like sensors (the LiDAR) with Ogre 2 -->
+  <xacro:macro name="rendering_system">
+    <gazebo>
+      <plugin filename="ignition-gazebo-sensors-system" name="ignition::gazebo::systems::Sensors">
+        <render_engine>ogre2</render_engine>
+      </plugin>
+    </gazebo>
+  </xacro:macro>
+
 </robot>

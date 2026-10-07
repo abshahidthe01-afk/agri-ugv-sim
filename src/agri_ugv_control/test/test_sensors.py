@@ -1,5 +1,6 @@
 """Tests for the sensors in the robot model (sensors.xacro)."""
 
+import math
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -70,3 +71,53 @@ def test_imu_noise_and_biases_on_all_three_axes(quantity, white, bias, drift):
         tau = float(noise.findtext('dynamic_bias_correlation_time'))
         density = float(noise.findtext('dynamic_bias_stddev'))
         assert density * (tau / 2) ** 0.5 == pytest.approx(drift)   # Gazebo's long-run spread
+
+
+def lidar(root):
+    """Return the LiDAR's gpu_lidar sensor element."""
+    [sensor] = [g.find('sensor') for g in root.findall('gazebo')
+                if g.get('reference') == 'lidar_link']
+    return sensor
+
+
+def test_lidar_sits_on_a_mast_and_its_lowest_beams_clear_the_roof():
+    root = model(controllers_file='x')
+    [joint] = [j for j in root.findall('joint') if j.get('name') == 'lidar_joint']
+    assert joint.get('type') == 'fixed' and joint.find('parent').get('link') == 'base_link'
+    x, y, z = (float(v) for v in joint.find('origin').get('xyz').split())
+    height = z + 0.205                                          # above the ground
+    assert (x, y, height) == pytest.approx((0.0, 0.0, 2.70))
+    lowest = -float(lidar(root).findtext('lidar/scan/vertical/min_angle'))
+    # roof edge mid-side (1.85 m, 0.75 m out), computers' outer corner (1.97 m), antennas
+    for top, out in [(1.85, 0.75), (1.97, math.hypot(0.2, 0.5)), (1.90, 0.53)]:
+        assert math.atan2(height - top, out) > lowest             # below the lowest beam
+
+
+def test_lidar_is_like_an_ouster_os0_64_and_publishes_its_points():
+    sensor = lidar(model(controllers_file='x'))
+    assert sensor.get('type') == 'gpu_lidar'
+    assert sensor.findtext('topic') == '/lidar'                  # points on /lidar/points
+    assert sensor.findtext('ignition_frame_id') == 'lidar_link'
+    assert float(sensor.findtext('update_rate')) == 10.0
+    scan = sensor.find('lidar/scan')
+    assert int(scan.findtext('horizontal/samples')) == 1024
+    step = (float(scan.findtext('horizontal/max_angle'))
+            - float(scan.findtext('horizontal/min_angle'))) / 1023
+    assert step == pytest.approx(2 * math.pi / 1024)             # all around, no double ray
+    assert int(scan.findtext('vertical/samples')) == 64
+    assert float(scan.findtext('vertical/max_angle')) == pytest.approx(math.pi / 4)
+    assert (float(sensor.findtext('lidar/range/min')),
+            float(sensor.findtext('lidar/range/max'))) == (0.3, 50.0)
+    assert float(sensor.findtext('lidar/noise/stddev')) == pytest.approx(0.01)
+
+
+def test_the_lidar_and_its_rendering_system_can_be_left_out():
+    with_lidar, without = model(controllers_file='x'), model(controllers_file='x', lidar='false')
+    plugins = [p.get('filename') for p in with_lidar.iter('plugin')]
+    assert plugins.count('ignition-gazebo-sensors-system') == 1
+    [system] = [p for p in with_lidar.iter('plugin')
+                if p.get('filename') == 'ignition-gazebo-sensors-system']
+    assert system.findtext('render_engine') == 'ogre2'
+    assert not [link for link in without.findall('link') if link.get('name') == 'lidar_link']
+    assert 'ignition-gazebo-sensors-system' not in {p.get('filename')
+                                                    for p in without.iter('plugin')}

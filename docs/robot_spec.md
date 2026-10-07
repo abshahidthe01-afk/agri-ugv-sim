@@ -64,6 +64,7 @@ not measurements. Sinkage and rolling resistance are not modelled.
 |---|---|---|
 | IMU (accelerometer, gyroscope) | `imu_link`, under the roof at the back (0.60 m behind the centre, 1.79 m above the ground), like the real robot's inertial unit [2] | `/imu`, 100 Hz, with noise and biases |
 | 2 GNSS antennas (NavSat) | `gnss_front_link` / `gnss_rear_link`, on the roof 1.90 m above the ground, 1.20 m apart front to rear | `/gnss/front/fix`, `/gnss/rear/fix` (`fix_ideal` without errors), `/gnss/heading`, 10 Hz |
+| 3D LiDAR, like an Ouster OS0-64 (an addition: the robot of [2] is driven by hand) | `lidar_link`, on a mast at the centre of the roof, 2.70 m above the ground: its lowest beams (45° down) pass over the roof edges ahead, behind and to the sides | `/lidar/points`, 10 Hz, 1024 x 64 points, ±45° vertical, 0.3-50 m, range noise 1 cm (assumed); `lidar:=false` leaves it out |
 
 Gazebo uses the SDF default gravity of 9.8 m/s² (the suspension above was sized with 9.81; 0.1 % apart).
 
