@@ -58,6 +58,73 @@ def fill_gaps(grid):
     return grid
 
 
+def pad_grid(grid, cells):
+    """
+    Extend a height grid by `cells` on every side, continuing the edge heights outwards.
+
+    The new cells are filled like gaps (fill_gaps), so the ground goes on level from the
+    edge instead of ending. The original cells keep their values.
+    """
+    if int(cells) != cells or cells < 0:
+        raise ValueError(f'cells must be a whole number >= 0, got {cells}')
+    grid = np.asarray(grid, dtype=float)
+    if cells == 0:
+        return grid.copy()
+    return fill_gaps(np.pad(grid, int(cells), constant_values=np.nan))
+
+
+def fill_photo_gaps(rgb, valid, block=10, fade=3.0, grain=4.0, seed=1):
+    """
+    Fill the pixels of a photo that have no data with plain soil colour.
+
+    The colour starts as the photo's colour at the nearest edge of the data (block means
+    of block x block pixels, spread outwards like fill_gaps) and fades into the photo's
+    typical (median) colour over about `fade` blocks; a little random grain (standard
+    deviation `grain`, fixed seed) keeps it from looking painted. No detail is invented.
+    """
+    rgb = np.asarray(rgb)
+    valid = np.asarray(valid, dtype=bool)
+    if rgb.ndim != 3 or rgb.shape[:2] != valid.shape or rgb.shape[2] != 3:
+        raise ValueError(f'need an RGB photo and a mask of the same size, got {rgb.shape} '
+                         f'and {valid.shape}')
+    if not valid.any():
+        raise ValueError('the photo has no valid pixel')
+    from PIL import Image  # only needed for textured terrains
+
+    h, w = valid.shape
+    rows, cols = -(-h // block), -(-w // block)
+    image = np.zeros((rows * block, cols * block, 3))
+    image[:h, :w] = rgb
+    known = np.zeros((rows * block, cols * block), bool)
+    known[:h, :w] = valid
+    inside = np.zeros_like(known)
+    inside[:h, :w] = True
+    sums = (image * known[..., None]).reshape(rows, block, cols, block, 3).sum(axis=(1, 3))
+    counts = known.reshape(rows, block, cols, block).sum(axis=(1, 3))
+    full = counts > inside.reshape(rows, block, cols, block).sum(axis=(1, 3)) / 2
+    if not full.any():
+        full = counts > 0
+    coarse = np.where(full[..., None], sums / np.maximum(counts, 1)[..., None], np.nan)
+    distance = np.where(full, 0.0, np.inf)       # in blocks from the data, growing outwards
+    step = 0
+    while np.isinf(distance).any() and step < rows + cols:
+        step += 1
+        padded = np.pad(distance, 1, constant_values=np.inf)
+        nearest = np.minimum.reduce([padded[:-2, 1:-1], padded[2:, 1:-1],
+                                     padded[1:-1, :-2], padded[1:-1, 2:]])
+        distance[np.isinf(distance) & (nearest == step - 1)] = step
+    edge = np.stack([fill_gaps(coarse[..., k]) for k in range(3)], axis=-1)
+    soil = np.median(rgb[valid].astype(float), axis=0)
+    colour = soil + (edge - soil) * np.exp(-distance / fade)[..., None]
+    small = Image.fromarray(np.clip(np.round(colour), 0, 255).astype(np.uint8))
+    smooth = np.asarray(small.resize((cols * block, rows * block), Image.BILINEAR),
+                        dtype=float)[:h, :w]
+    smooth += np.random.default_rng(seed).normal(0.0, grain, (h, w))[..., None]
+    out = rgb.copy()
+    out[~valid] = np.clip(np.round(smooth[~valid]), 0, 255).astype(rgb.dtype)
+    return out
+
+
 def heights_from_dem(heights, valid, block, percentile, min_valid=0.5):
     """
     Return (grid, reference): a terrain height grid ready for mesh_from_heights.
@@ -75,26 +142,40 @@ def heights_from_dem(heights, valid, block, percentile, min_valid=0.5):
     return grid - reference, reference
 
 
-def texture_from_ortho(rgb, block, rows, cols, factor):
+def texture_from_ortho(rgb, block, rows, cols, factor, pad=0, fill=False, margin=2):
     """
     Cut the area covered by a rows x cols terrain grid out of an aerial photo and shrink it.
 
     rgb is the photo as (height, width, 3), on the same pixel grid as the DEM; the terrain
     used the first rows * block by cols * block pixels. factor > 1 averages factor x factor
-    pixels into one, to keep the texture file small.
+    pixels into one, to keep the texture file small. pad adds that many cells on every side
+    (as pad_grid does for the heights), black at first. With fill, the texture pixels
+    without photo data (black in the photo, or added by pad), and `margin` pixels around
+    them where the photo's edge is often dark, get plain soil colour (fill_photo_gaps).
     """
     rgb = np.asarray(rgb)
     if rgb.ndim != 3 or rgb.shape[2] != 3:
         raise ValueError(f'expected an RGB image of shape (height, width, 3), got {rgb.shape}')
+    if int(pad) != pad or pad < 0:
+        raise ValueError(f'pad must be a whole number of cells >= 0, got {pad}')
     height, width = rows * block, cols * block
     if rgb.shape[0] < height or rgb.shape[1] < width:
         raise ValueError(f'photo {rgb.shape[:2]} is smaller than the terrain {height, width}')
-    if int(factor) != factor or factor < 1 or height % factor or width % factor:
-        raise ValueError(f'factor must be a whole number that divides {height} and {width}')
+    border = int(pad) * block
+    full_h, full_w = height + 2 * border, width + 2 * border
+    if int(factor) != factor or factor < 1 or full_h % factor or full_w % factor:
+        raise ValueError(f'factor must be a whole number that divides {full_h} and {full_w}')
     factor = int(factor)
-    area = rgb[:height, :width].astype(float)
-    small = area.reshape(height // factor, factor, width // factor, factor, 3).mean(axis=(1, 3))
-    return np.round(small).astype(np.uint8)
+    area = np.pad(rgb[:height, :width], ((border, border), (border, border), (0, 0)))
+    shape = (full_h // factor, factor, full_w // factor, factor)
+    small = np.round(area.reshape(*shape, 3).mean(axis=(1, 3), dtype=float)).astype(np.uint8)
+    if not fill:
+        return small
+    valid = (area.max(axis=2) > 0).reshape(shape).all(axis=(1, 3))
+    for _ in range(margin):
+        edge = np.pad(valid, 1, constant_values=False)
+        valid &= edge[:-2, 1:-1] & edge[2:, 1:-1] & edge[1:-1, :-2] & edge[1:-1, 2:]
+    return fill_photo_gaps(small, valid)
 
 
 def read_ortho(path):

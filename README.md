@@ -44,7 +44,10 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard
 The `must_c_field` terrain is derived from the MuST-C drone elevation map (DEM) and
 aerial photo (orthophoto) of 17 May 2023: heights resampled to a 0.45 m grid using the
 10th height percentile per cell, gaps outside the field filled, heights relative to the
-field centre; the photo is used as the terrain's texture at 6 cm per pixel.
+field centre; the photo is used as the terrain's texture at 6 cm per pixel. The survey
+ends about 1 m beyond the southern plots, so the terrain is extended by 3.6 m on every
+side (edge heights continued) for the robot to drive around the field; where the photo
+has no data, the texture is plain soil colour.
 The plot layout (`src/agri_ugv_field/data/must_c_field_plots.csv`) comes from the
 dataset's field shapefile (`md_FieldSHP`), placed in the same world frame. The crop
 plants in the plots are generated: row spacings and plant sizes are assumed typical

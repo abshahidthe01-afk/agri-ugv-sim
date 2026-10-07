@@ -52,4 +52,4 @@ def test_plots_lie_on_the_terrain_and_use_its_origin(rows):
     assert origin + f'N {north:.2f})' in LAYOUT.read_text()
     corners = np.array([[r[f'x{k}'], r[f'y{k}']] for r in rows if r['type'] == 'plot'
                         for k in range(1, 5)])
-    assert np.all(np.abs(corners) < [87.0, 31.7])   # inside the mesh (142 x 388 points, 0.45 m)
+    assert np.all(np.abs(corners) < [87.0, 31.7])   # inside the surveyed 174.6 x 63.9 m

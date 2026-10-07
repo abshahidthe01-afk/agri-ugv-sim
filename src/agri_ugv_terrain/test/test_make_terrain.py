@@ -93,3 +93,35 @@ def test_command_line_dem_with_texture(tmp_path):
     image = np.asarray(Image.open(meshes / 'field.jpg'))
     assert image.shape == (10, 15, 3)      # 4 x 6 cells of 5 x 5 pixels, shrunk by 2
     assert image[0, 0, 0] > 200 and image[-1, 0, 0] < 50   # north (top) red, south not
+
+
+def test_command_line_dem_extended_with_plain_soil(tmp_path, capsys):
+    rasterio = pytest.importorskip('rasterio')
+    pytest.importorskip('PIL')
+    from rasterio.transform import from_origin
+    grid = {'driver': 'GTiff', 'height': 20, 'width': 30, 'crs': 'EPSG:32632',
+            'transform': from_origin(1000.0, 2000.0, 0.03, 0.03)}
+    dem = np.full((20, 30), 222.0, dtype='float32')
+    dem[:10] += 0.5                        # northern half 0.5 m higher
+    with rasterio.open(tmp_path / 'dem.tif', 'w', count=1, dtype='float32', **grid) as dst:
+        dst.write(dem, 1)
+    photo = np.full((3, 20, 30), 120, dtype=np.uint8)
+    photo[:, :, :5] = 0                    # no photo data in the western cell column
+    with rasterio.open(tmp_path / 'ortho.tif', 'w', count=3, dtype='uint8', **grid) as dst:
+        dst.write(photo)
+    main(['--shape', 'dem', '--name', 'field', '--dem-file', str(tmp_path / 'dem.tif'),
+          '--ortho-file', str(tmp_path / 'ortho.tif'), '--spacing', '0.15', '--pad', '0.2',
+          '--fill-photo-gaps', '--output-dir', str(tmp_path)])
+    out = capsys.readouterr().out
+    assert '8 x 10 points' in out          # 4 x 6 cells, 0.2 m rounds up to 2 cells per side
+    assert 'E 1000.45 N 1999.70' in out    # the origin stays where it was
+    assert 'extended by 0.3 m on every side' in out
+    from PIL import Image
+    meshes = tmp_path / 'field' / 'meshes'
+    image = np.asarray(Image.open(meshes / 'field.jpg'))
+    assert image.shape == (20, 25, 3)      # 8 x 10 cells of 5 x 5 pixels, shrunk by 2
+    assert image.min() > 80                # no black: border and gap filled
+    lines = (meshes / 'field.obj').read_text().splitlines()
+    z = np.array([float(line.split()[3]) for line in lines if line.startswith('v ')])
+    assert z.reshape(8, 10)[0].tolist() == [z.reshape(8, 10)[2, 2]] * 10   # south: level
+    assert z.reshape(8, 10)[-1, 4] == pytest.approx(z[0] + 0.5)            # north: higher

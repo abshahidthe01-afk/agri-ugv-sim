@@ -42,7 +42,8 @@
       <direction>-0.5 0.1 -0.9</direction>
     </light>
 
-    <!-- Ground: 174.6 x 63.9 m real terrain, 0.45 m grid (UTM 32N E 357472.44 N 5610188.04) -->
+    <!-- Ground: 174.6 x 63.9 m real terrain, 0.45 m grid (UTM 32N E 357472.44 N 5610188.04),
+         extended by 3.6 m on every side (edge heights continued): 181.8 x 71.1 m -->
     <include>
       <uri>model://must_c_field</uri>
     </include>

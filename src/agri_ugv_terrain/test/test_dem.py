@@ -1,7 +1,7 @@
 """Tests for turning a DEM raster into a terrain height grid."""
 
-from agri_ugv_terrain.dem import (block_percentile, fill_gaps, heights_from_dem, read_dem,
-                                  read_ortho, texture_from_ortho)
+from agri_ugv_terrain.dem import (block_percentile, fill_gaps, fill_photo_gaps, heights_from_dem,
+                                  pad_grid, read_dem, read_ortho, texture_from_ortho)
 import numpy as np
 import pytest
 
@@ -111,3 +111,48 @@ def test_read_ortho_round_trip(tmp_path):
     assert rgb[1, 2].tolist() == [5, 11, 17]   # pixel (1, 2) across the three bands
     assert pixel == pytest.approx(0.03)
     assert (left, top) == pytest.approx((1000.0, 2000.0))
+
+
+def test_pad_grid_continues_the_edges_and_keeps_the_inside():
+    grid = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    padded = pad_grid(grid, 2)
+    assert padded.shape == (6, 7)
+    assert np.array_equal(padded[2:4, 2:5], grid)
+    assert padded[0, 3] == 2.0 and padded[5, 3] == 5.0       # straight out from the edges
+    assert padded[3, 0] == 4.0 and padded[2, 6] == 3.0
+    assert padded.min() >= 1.0 and padded.max() <= 6.0
+    assert np.array_equal(pad_grid(grid, 0), grid)
+    with pytest.raises(ValueError):
+        pad_grid(grid, 1.5)
+
+
+def test_fill_photo_gaps_gives_plain_soil_and_keeps_the_photo():
+    rgb = np.zeros((60, 80, 3), dtype=np.uint8)
+    valid = np.zeros((60, 80), bool)
+    valid[:, :40] = True
+    rgb[:, :40] = [120, 90, 60]                  # soil
+    rgb[:30, 35:40] = [60, 160, 60]             # a green strip along the edge
+    out = fill_photo_gaps(rgb, valid, block=5, fade=2.0, grain=0.0)
+    assert np.array_equal(out[valid], rgb[valid])
+    assert out[45, 41].tolist() == [120, 90, 60]          # beside soil: soil
+    assert out[10, 41, 1] > 120                           # beside the strip: greenish ...
+    assert np.abs(out[10, 79].astype(int) - [120, 90, 60]).max() <= 3   # ... fading to soil
+    again = fill_photo_gaps(rgb, valid, block=5)          # grain has a fixed seed
+    assert np.array_equal(again, fill_photo_gaps(rgb, valid, block=5))
+    with pytest.raises(ValueError):
+        fill_photo_gaps(rgb, np.zeros((60, 80), bool))
+
+
+def test_texture_from_ortho_can_pad_and_fill():
+    rgb = np.full((6, 12, 3), 100, dtype=np.uint8)
+    rgb[:, :3] = 0                               # no data in the western cell column
+    plain = texture_from_ortho(rgb, 3, 2, 4, 3)
+    assert np.array_equal(texture_from_ortho(rgb, 3, 2, 4, 3, pad=0, fill=False), plain)
+    padded = texture_from_ortho(rgb, 3, 2, 4, 3, pad=1)
+    assert padded.shape == (4, 6, 3) and padded[0].max() == 0     # black border
+    assert np.array_equal(padded[1:3, 1:5], plain)
+    filled = texture_from_ortho(rgb, 3, 2, 4, 3, pad=1, fill=True, margin=0)
+    assert filled.shape == (4, 6, 3) and filled.min() > 80        # no black left
+    assert np.array_equal(filled[1:3, 2:5], plain[:, 1:])          # the photo is kept
+    with pytest.raises(ValueError):
+        texture_from_ortho(rgb, 3, 2, 4, 4, pad=1)               # 12 x 18 px: 4 does not fit
