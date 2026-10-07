@@ -2,7 +2,8 @@
 
 import math
 
-from agri_ugv_localization.ekf import PoseEkf, tilted_lever, wheel_speed_sigma, wrap
+from agri_ugv_localization.ekf import (own_acceleration, PoseEkf, tilted_lever, TiltEstimator,
+                                       wheel_speed_sigma, wrap)
 from agri_ugv_localization.gnss_errors import GaussMarkov
 import numpy as np
 import pytest
@@ -103,3 +104,41 @@ def test_wheels_count_for_less_at_speed_and_while_turning():
     assert wheel_speed_sigma(0.02, 0.0, 0.0, 0.5, 1.0) == pytest.approx(0.02)
     assert wheel_speed_sigma(0.02, 0.5, 0.0, 0.5, 1.0) == pytest.approx(math.hypot(0.02, 0.25))
     assert wheel_speed_sigma(0.02, 0.0, 0.3, 0.5, 1.0) == pytest.approx(math.hypot(0.02, 0.3))
+
+
+def test_own_acceleration_adds_the_centripetal_part():
+    assert own_acceleration((0.2, -0.1), (0.0, 0.0), 0.0) == pytest.approx((0.2, -0.1))
+    assert own_acceleration((0.0, 0.0), (0.5, 0.0), 0.2) == pytest.approx((0.0, 0.1))
+    assert own_acceleration((0.0, 0.0), (0.0, 0.5), 0.2) == pytest.approx((-0.1, 0.0))
+
+
+def test_the_tilt_estimator_follows_the_gyro_and_drifts_back_to_gravity():
+    tilt = TiltEstimator(time_constant=10.0)
+    level = (0.0, 0.0, 9.8)
+    tilt.correct_roll(level, (0.0, 0.0), 0.01)
+    tilt.correct_pitch(0.0, 0.0)
+    assert tilt.ready and (tilt.roll, tilt.pitch) == (0.0, 0.0)
+    for _ in range(100):                          # lean 2 deg to the right within 1 s
+        tilt.predict(0.01, (math.radians(-2.0), 0.0, 0.0))
+    assert math.degrees(tilt.roll) == pytest.approx(-2.0)
+    for _ in range(1000):                         # 10 s with a gyro bias, gravity level
+        tilt.predict(0.01, (0.0003, 0.0, 0.0))
+        tilt.correct_roll(level, (0.0, 0.0), 0.01)
+    assert math.degrees(tilt.roll) == pytest.approx(-2.0 * math.exp(-1.0), abs=0.2)
+    with pytest.raises(ValueError):
+        TiltEstimator(time_constant=0.0)
+
+
+def test_sideways_acceleration_does_not_read_as_a_lean():
+    """Crabbing off at 1 m/s^2 for 0.5 s: the old 1 s smoothing leans 2.3 deg, this 0.0."""
+    tilt, smoothed = TiltEstimator(time_constant=10.0), 0.0
+    tilt.correct_roll((0.0, 0.0, 9.8), (0.0, 0.0), 0.01)
+    tilt.correct_pitch(0.0, 0.0)
+    for _ in range(50):
+        accel = (0.0, -1.0, 9.8)                  # accelerating to the right, level robot
+        tilt.correct_roll(accel, (0.0, -1.0), 0.01)
+        smoothed += 0.01 / 1.01 * (math.atan2(accel[1], accel[2]) - smoothed)
+    assert tilt.roll == pytest.approx(0.0, abs=1e-12)
+    assert math.degrees(smoothed) == pytest.approx(-2.3, abs=0.1)
+    tilt.correct_roll((0.0, -1.0, 9.8), (0.0, 0.0), 0.01)      # without taking it out
+    assert math.degrees(tilt.roll) < -0.005

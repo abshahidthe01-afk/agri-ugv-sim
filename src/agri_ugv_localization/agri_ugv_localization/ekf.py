@@ -106,6 +106,64 @@ def tilted_lever(lever, pitch, roll):
             y * math.cos(roll) - z * math.sin(roll))
 
 
+def own_acceleration(acceleration, velocity, turn_rate):
+    """
+    Return the robot's own horizontal acceleration (forward, left) in its body frame [m/s^2].
+
+    acceleration is the rate of change of the body velocity (from the wheels), velocity the
+    body velocity (vx, vy) and turn_rate the yaw rate: turning while moving adds the
+    centripetal part. An accelerometer measures this on top of gravity.
+    """
+    (dvx, dvy), (vx, vy) = acceleration, velocity
+    return dvx - turn_rate * vy, dvy + turn_rate * vx
+
+
+class TiltEstimator:
+    """
+    Roll and pitch from the gyroscope, slowly pulled towards gravity and the GNSS pitch.
+
+    The gyro follows fast changes exactly (the body twisting while the wheels re-steer, a
+    bump); without a reference it would drift, so the angles are pulled towards measured
+    ones with time constant 'time_constant' [s]: roll towards the direction of gravity in
+    the accelerometer (with the robot's own acceleration taken out first: sideways
+    acceleration alone would read as a lean, 1 m/s^2 as 5.8 deg), pitch towards the
+    dual-antenna GNSS pitch. Angles in radians; positive pitch = nose down, positive roll =
+    left side up.
+    """
+
+    def __init__(self, time_constant=10.0):
+        """Start without angles: the first measurements set them."""
+        if time_constant <= 0:
+            raise ValueError(f'time_constant must be positive, got {time_constant}')
+        self.time_constant = time_constant
+        self.roll = self.pitch = None
+
+    @property
+    def ready(self):
+        """Return True once both angles have been measured."""
+        return self.roll is not None and self.pitch is not None
+
+    def predict(self, dt, gyro):
+        """Turn the angles by the body rates gyro (x, y, z) [rad/s] for dt seconds."""
+        if not self.ready or dt <= 0:
+            return
+        p, q, r = gyro
+        roll, pitch = self.roll, self.pitch
+        self.roll += (p + (q * math.sin(roll) + r * math.cos(roll)) * math.tan(pitch)) * dt
+        self.pitch += (q * math.cos(roll) - r * math.sin(roll)) * dt
+
+    def correct_roll(self, accel, own, dt):
+        """Pull the roll towards gravity in the accelerometer reading accel (x, y, z)."""
+        roll = math.atan2(accel[1] - own[1], accel[2])
+        self.roll = roll if self.roll is None else \
+            self.roll + (roll - self.roll) * min(1.0, dt / self.time_constant)
+
+    def correct_pitch(self, pitch, dt):
+        """Pull the pitch towards a measured pitch [rad] (dt: time since the last one)."""
+        self.pitch = pitch if self.pitch is None else \
+            self.pitch + (pitch - self.pitch) * min(1.0, dt / self.time_constant)
+
+
 def wheel_speed_sigma(base_sigma, speed, turn_rate, per_speed, per_turn):
     """
     Return how uncertain one wheel-odometry velocity sample is [m/s].

@@ -6,7 +6,11 @@ Subscribes:  /robot_description (latched)   antenna offsets
              /wheel/odom                    body velocity
              /gnss/front/fix, /gnss/rear/fix, /gnss/heading   corrections at 10 Hz
 Publishes:   /localization/odometry (nav_msgs/Odometry) pose in the world frame 'map'
-Parameters:  world_file (its <spherical_coordinates>), the GNSS error model, tilt_time,
+Parameters:  world_file (its <spherical_coordinates>), the GNSS error model
+             tilt_from_gyro (true): roll and pitch from the gyro, pulled towards gravity
+             and the GNSS pitch with time constant tilt_gyro_time [s] (TiltEstimator);
+             false: roll = accelerometer and pitch = GNSS pitch, each smoothed with
+             tilt_time [s] (sideways acceleration then reads as a lean)
              latency_compensation: move each GNSS measurement forward by the robot's motion
              since it was taken (fixes arrive later than the IMU that drives the filter)
              wheel_slip_speed, wheel_slip_turn: trust the wheels less at speed and while
@@ -17,7 +21,8 @@ The IMU's own orientation output is not used: in Gazebo it is perfect, a real on
 
 import math
 
-from agri_ugv_localization.ekf import PoseEkf, tilted_lever, wheel_speed_sigma
+from agri_ugv_localization.ekf import (own_acceleration, PoseEkf, tilted_lever, TiltEstimator,
+                                       wheel_speed_sigma)
 from agri_ugv_localization.frames import antenna_levers, spherical_coordinates, world_from_fix
 from nav_msgs.msg import Odometry
 import rclpy
@@ -46,6 +51,9 @@ class LocalizationNode(Node):
         self.declare_parameter('latency_compensation', True)     # read at every fix
         self.declare_parameter('wheel_slip_speed', 0.5)          # read at every IMU sample
         self.declare_parameter('wheel_slip_turn', 1.0)
+        self.declare_parameter('tilt_from_gyro', True)           # read at every use
+        self.tilt = TiltEstimator(self.declare_parameter('tilt_gyro_time', 10.0).value)
+        self.acceleration, self.last_wheels, self.last_heading = (0.0, 0.0), None, None
         self.rate, self.ages = 0.0, []
         self.params = p
         self.origin = (0.0, 0.0, 0.0, 0.0)
@@ -72,9 +80,24 @@ class LocalizationNode(Node):
         self.levers = {name: found[link] for name, link in ANTENNAS.items()}
 
     def on_wheels(self, msg):
-        """Keep the newest body velocity from the wheels and its uncertainty."""
-        self.velocity = (msg.twist.twist.linear.x, msg.twist.twist.linear.y)
+        """Keep the newest body velocity from the wheels, its change and its uncertainty."""
+        velocity = (msg.twist.twist.linear.x, msg.twist.twist.linear.y)
+        time = stamp_seconds(msg)
+        if self.last_wheels is not None and 0 < time - self.last_wheels < 0.1:
+            dt = time - self.last_wheels
+            self.acceleration = ((velocity[0] - self.velocity[0]) / dt,
+                                 (velocity[1] - self.velocity[1]) / dt)
+        else:
+            self.acceleration = (0.0, 0.0)
+        self.last_wheels = time
+        self.velocity = velocity
         self.speed_sigma = math.sqrt(max(msg.twist.covariance[0], 1e-8))
+
+    def tilt_angles(self):
+        """Return the (pitch, roll) used for the antenna levers."""
+        if self.get_parameter('tilt_from_gyro').value and self.tilt.ready:
+            return self.tilt.pitch, self.tilt.roll
+        return self.pitch, self.roll
 
     def smooth(self, old, new, dt):
         """Low-pass filter for the tilt angles, time constant tilt_time."""
@@ -82,12 +105,15 @@ class LocalizationNode(Node):
         return old + a * (new - old)
 
     def on_imu(self, msg):
-        """Predict with the gyro and the newest wheel velocity; estimate roll from gravity."""
+        """Predict with the gyro and the newest wheel velocity; estimate roll and pitch."""
         time = stamp_seconds(msg)
-        a = msg.linear_acceleration
+        a, g = msg.linear_acceleration, msg.angular_velocity
         dt = 0.0 if self.last_imu is None else time - self.last_imu
         self.last_imu = time
         self.roll = self.smooth(self.roll, math.atan2(a.y, a.z), dt)
+        self.tilt.predict(dt, (g.x, g.y, g.z))
+        self.tilt.correct_roll((a.x, a.y, a.z),
+                               own_acceleration(self.acceleration, self.velocity, g.z), dt)
         if self.ekf is None or dt <= 0:
             return
         sigma = wheel_speed_sigma(self.speed_sigma, math.hypot(*self.velocity),
@@ -105,13 +131,17 @@ class LocalizationNode(Node):
         yaw_true_east = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y ** 2 + q.z ** 2))
         pitch = math.asin(max(-1.0, min(1.0, 2 * (q.w * q.y - q.z * q.x))))
         self.pitch = pitch if self.ekf is None else self.smooth(self.pitch, pitch, 0.1)
+        time = stamp_seconds(msg)
+        self.tilt.correct_pitch(pitch, 0.0 if self.last_heading is None
+                                else time - self.last_heading)
+        self.last_heading = time
         yaw = yaw_true_east - math.radians(self.origin[3])         # into world axes
         variance = msg.orientation_covariance[8]
         if self.ekf is not None:
             yaw += self.rate * self.age(msg)               # it turned on since the measurement
             self.ekf.update_yaw(yaw, variance)
         elif self.levers is not None and 'front' in self.fixes:
-            fx, fy = tilted_lever(self.levers['front'], self.pitch, self.roll)
+            fx, fy = tilted_lever(self.levers['front'], *self.tilt_angles())
             x, y = self.fixes['front']
             c, s = math.cos(yaw), math.sin(yaw)
             self.ekf = PoseEkf(x - c * fx + s * fy, y - s * fx - c * fy, yaw,
@@ -145,7 +175,7 @@ class LocalizationNode(Node):
         x += (math.cos(yaw) * vx - math.sin(yaw) * vy) * age
         y += (math.sin(yaw) * vx + math.cos(yaw) * vy) * age
         own = self.params['gnss_own_sigma'] ** 2
-        self.ekf.update_position((x, y), tilted_lever(self.levers[name], self.pitch, self.roll),
+        self.ekf.update_position((x, y), tilted_lever(self.levers[name], *self.tilt_angles()),
                                  [[own, 0.0], [0.0, own]])
 
     def publish(self, stamp, gyro):
