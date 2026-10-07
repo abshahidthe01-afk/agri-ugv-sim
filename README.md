@@ -14,8 +14,18 @@ rows on real terrain. ROS 2 Humble and Gazebo Fortress.
 - Terrain generator: test terrains and the real MuST-C field from drone elevation data
 - Field: the 80 plots of the real MuST-C trial from its official shapefile, with
   generated crop plants (textured leaves, about 22,500 plants)
+- Localization: own EKF fusing RTK GNSS (two antennas: position and heading), IMU
+  and wheel odometry
+- Autonomous coverage mission: passes over every plot, driven without turning
+  (four-wheel steering: forwards, backwards and sideways), with steer-first driving
+  and recovery from steering stalls
+- Crop damage metric: wheel travel over the crop rows
 
-Next: GNSS/IMU localization, coverage planning and LiDAR row following.
+First whole-field run (baseline, all 80 plots, 4.2 km): 643 of 643 segments in 2.85 h
+of simulated time; localization error 1.9 cm mean; wheels crushed plants on 32.5 % of
+their travel inside plots, 92 % of that in the dense cereal and mixture plots.
+
+Next: row-aware passes, LiDAR row following, the phenotyping scanners as sensors.
 
 ## Quick start
 
@@ -32,7 +42,15 @@ ros2 launch agri_ugv_gazebo sim.launch.py world:=must_c_field
 
 Worlds: `flat` (default), `flat_mesh`, `waves`, `must_c_field`.
 
-Drive it from a second terminal:
+Or run the autonomous mission (one plot here; leave out `plots:=` for the whole field)
+and start it from a second terminal:
+
+```bash
+ros2 launch agri_ugv_navigation mission.launch.py plots:=198
+ros2 service call /mission/start std_srvs/srv/Trigger
+```
+
+Or drive it yourself from a second terminal:
 
 ```bash
 source install/setup.bash
