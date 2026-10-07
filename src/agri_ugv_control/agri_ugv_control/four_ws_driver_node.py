@@ -20,11 +20,14 @@ Parameters:  max_linear_x, max_linear_y [m/s], max_angular_z [rad/s],
              the wheels keep their angles meanwhile (false: each direction on its own)
              limit_margin [rad] (0.35): a wheel asked to point this little past its
              +-90 deg steering limit stays at the limit instead of swinging round
+             stall_time [s] (1.5), creep_speed [m/s] (0.05), creep_time [s] (2.0): if the
+             steering stops making progress while the robot stands (a tyre stuck, e.g. in a
+             groove), creep in the commanded direction so the tyre can roll free (StallWatch)
 """
 
 from agri_ugv_control.kinematics import inverse_kinematics
 from agri_ugv_control.robot_geometry import geometry_from_urdf
-from agri_ugv_control.steering import steer_first
+from agri_ugv_control.steering import creep, StallWatch, steer_first, steering_misalignment
 from agri_ugv_control.velocity_limiter import limit_velocity, VelocityLimits
 from geometry_msgs.msg import Twist
 import rclpy
@@ -56,6 +59,9 @@ class FourWsDriver(Node):
         self.declare_parameter('wait_for_steering', True)        # read every cycle
         self.declare_parameter('ramp_together', True)            # read every cycle
         self.declare_parameter('limit_margin', 0.35)             # read every cycle
+        self.declare_parameter('creep_speed', 0.05)              # read every cycle
+        self.watch = StallWatch(self.declare_parameter('stall_time', 1.5).value,
+                                self.declare_parameter('creep_time', 2.0).value)
         self.tolerance = self.declare_parameter('steer_tolerance', 0.05).value   # [rad]
         self.measured = None     # measured steering angle per module, from /joint_states
 
@@ -122,9 +128,23 @@ class FourWsDriver(Node):
         together = self.get_parameter('ramp_together').value
         margin = self.get_parameter('limit_margin').value
         if self.get_parameter('wait_for_steering').value and self.measured is not None:
-            self.velocity, commands = steer_first(
-                target, self.velocity, self.measured, self.modules, self.wheel_radius,
-                self.limits, self.dt, self.tolerance, together, margin)
+            aim = inverse_kinematics(*target, self.modules, self.wheel_radius, margin)
+            misalignment = steering_misalignment([c.steer_angle for c in aim], self.measured)
+            standing = max(abs(v) for v in self.velocity) <= 1e-3
+            stuck_before = self.watch.creep_left > 0
+            if self.watch.update(self.dt, misalignment, self.tolerance, standing):
+                if not stuck_before:
+                    self.get_logger().warn(
+                        f'Steering stalled ({misalignment:.2f} rad from the target for '
+                        f'{self.watch.stall_time:.1f} s): creeping to free the wheel '
+                        f'(stall {self.watch.count})')
+                self.velocity, commands = creep(
+                    target, self.velocity, self.measured, self.modules, self.wheel_radius,
+                    self.limits, self.dt, self.get_parameter('creep_speed').value, margin)
+            else:
+                self.velocity, commands = steer_first(
+                    target, self.velocity, self.measured, self.modules, self.wheel_radius,
+                    self.limits, self.dt, self.tolerance, together, margin)
         else:
             self.velocity = limit_velocity(target, self.velocity, self.limits, self.dt,
                                            together)

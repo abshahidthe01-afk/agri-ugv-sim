@@ -3,7 +3,7 @@
 import math
 
 from agri_ugv_control.kinematics import inverse_kinematics, WheelModule
-from agri_ugv_control.steering import steer_first, steering_misalignment
+from agri_ugv_control.steering import creep, StallWatch, steer_first, steering_misalignment
 from agri_ugv_control.velocity_limiter import VelocityLimits
 import pytest
 
@@ -76,3 +76,36 @@ def test_a_small_correction_while_crabbing_does_not_stop_the_robot_with_a_margin
     velocity, _ = steer_first((-0.01, 0.5, 0.0), (0.0, 0.5, 0.0), crab, MODULES, RADIUS, LIMITS,
                               0.02, 0.05)
     assert velocity == pytest.approx((0.0, 0.48, 0.0))     # brakes to swing the wheels round
+
+
+def test_a_steering_joint_that_stops_short_is_noticed_and_a_creep_timed():
+    watch = StallWatch(stall_time=1.5, creep_time=2.0, progress=0.02)
+    assert not watch.update(0.25, 0.8, 0.05, standing=True)   # notes where it stands
+    steps = [watch.update(0.25, 0.8, 0.05, standing=True) for _ in range(5)]
+    assert not any(steps)                                  # 1.25 s without progress
+    assert watch.update(0.25, 0.8, 0.05, standing=True)    # 1.5 s: creep
+    assert watch.count == 1
+    creeping = [watch.update(0.25, 0.8, 0.05, standing=False) for _ in range(7)]
+    assert all(creeping) and not watch.update(0.25, 0.8, 0.05, standing=False)  # 2 s
+
+
+def test_steering_that_makes_progress_or_is_aligned_never_creeps():
+    watch = StallWatch()
+    angle = 1.5
+    for _ in range(200):                                   # a slow but steady turn
+        angle -= 0.004
+        assert not watch.update(0.02, angle, 0.05, standing=True)
+    assert not watch.update(0.02, 0.01, 0.05, standing=True)
+    with pytest.raises(ValueError):
+        StallWatch(stall_time=0.0)
+
+
+def test_creeping_rolls_each_wheel_along_where_it_points():
+    stuck = [0.0, -math.radians(54), 0.0, 0.0]             # front right still turned
+    velocity, commands = creep((0.5, 0.0, 0.0), (0.0, 0.0, 0.0), stuck, MODULES, RADIUS,
+                               LIMITS, 0.1, 0.05)
+    assert velocity == pytest.approx((0.05, 0.0, 0.0))     # 1 m/s^2 for 0.1 s, at most 5 cm/s
+    assert [c.steer_angle for c in commands] == pytest.approx([0.0] * 4)   # still steering
+    speeds = [c.wheel_speed * RADIUS for c in commands]
+    assert speeds[0] == pytest.approx(0.05) and speeds[1] == pytest.approx(0.05 * math.cos(
+        math.radians(54)))                                 # the turned wheel rolls less
