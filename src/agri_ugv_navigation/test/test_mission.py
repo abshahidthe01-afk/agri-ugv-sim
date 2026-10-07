@@ -104,3 +104,13 @@ def test_a_mission_needs_segments_and_a_speed():
         Mission([], 0.0)
     with pytest.raises(ValueError):
         Mission(plan_mission(PLOTS, BOUNDARY)[0], 0.0, speed=0.0)
+
+
+def test_follower_options_reach_the_follower_and_can_change():
+    segments, heading = plan_mission(PLOTS, BOUNDARY)
+    mission = Mission(segments, heading, max_angle=0.1)
+    x, y = segments[0]['start']
+    gentle, _ = mission.step((x + 0.1, y, heading))             # 10 cm off the first pass
+    mission.options['max_angle'] = 1.5
+    strong, _ = mission.step((x + 0.1, y, heading))
+    assert abs(gentle[0]) < abs(strong[0]) or abs(gentle[1]) < abs(strong[1])

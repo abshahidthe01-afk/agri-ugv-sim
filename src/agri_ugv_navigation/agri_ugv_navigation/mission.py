@@ -114,13 +114,18 @@ class Mission:
     anyway, because the driver turns the wheels to the new direction before rolling.
     """
 
-    def __init__(self, segments, heading, speed=0.5):
-        """Prepare to drive 'segments' facing 'heading' [rad] at 'speed' [m/s]."""
+    def __init__(self, segments, heading, speed=0.5, **options):
+        """
+        Prepare to drive 'segments' facing 'heading' [rad] at 'speed' [m/s].
+
+        options are passed to the follower (e.g. max_angle); they may be changed later.
+        """
         if not segments:
             raise ValueError('the mission has no segments')
         if speed <= 0:
             raise ValueError(f'speed must be positive, got {speed}')
         self.segments, self.heading, self.speed = segments, heading, speed
+        self.options = options
         self.index = 0
 
     @property
@@ -139,7 +144,7 @@ class Mission:
         while not self.finished:
             segment = self.segments[self.index]
             vx, vy, wz, done = follow(pose, segment['start'], segment['end'], self.heading,
-                                      self.speed)
+                                      self.speed, **self.options)
             if not done:
                 return (vx, vy, wz), changed
             self.index += 1

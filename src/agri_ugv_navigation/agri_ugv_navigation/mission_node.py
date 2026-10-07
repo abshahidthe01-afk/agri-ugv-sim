@@ -13,6 +13,8 @@ Services:    /mission/start, /mission/stop (std_srvs/Trigger)
 Parameters:  layout_file (default: the MuST-C plot layout of agri_ugv_field)
              plots: plot_IDs separated by commas, e.g. '198' (empty: the whole field)
              speed [m/s], rate [Hz], pose_timeout [s]
+             correction_angle [rad] (0.1, read every cycle): corrections stay within this
+             angle of the motion (see follow); large values switch the limit off
 """
 
 import json
@@ -50,6 +52,7 @@ class MissionNode(Node):
         speed = self.declare_parameter('speed', 0.5).value
         rate = self.declare_parameter('rate', 20.0).value
         self.pose_timeout = self.declare_parameter('pose_timeout', 0.5).value
+        self.declare_parameter('correction_angle', 0.1)
         with open(layout_file) as text:
             segments, heading, plot_ids = load_plan(text.read(), '' if plots is None else plots)
         self.mission = Mission(segments, heading, speed)
@@ -123,6 +126,7 @@ class MissionNode(Node):
             self.get_logger().warn('No recent pose from /localization/odometry: standing still',
                                    throttle_duration_sec=5.0)
             return
+        self.mission.options['max_angle'] = self.get_parameter('correction_angle').value
         (vx, vy, wz), changed = self.mission.step(self.pose)
         command = Twist()
         command.linear.x, command.linear.y, command.angular.z = vx, vy, wz

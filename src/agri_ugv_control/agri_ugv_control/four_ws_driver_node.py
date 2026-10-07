@@ -18,7 +18,7 @@ Parameters:  max_linear_x, max_linear_y [m/s], max_angular_z [rad/s],
              within steer_tolerance [rad] of the new angles (avoids skidding wheels)
              ramp_together (true): speed up and brake in all directions together, so
              the wheels keep their angles meanwhile (false: each direction on its own)
-             limit_margin [rad] (0.15): a wheel asked to point this little past its
+             limit_margin [rad] (0.35): a wheel asked to point this little past its
              +-90 deg steering limit stays at the limit instead of swinging round
 """
 
@@ -55,7 +55,7 @@ class FourWsDriver(Node):
         self.get_logger().info(f'Velocity limits: {self.limits}')
         self.declare_parameter('wait_for_steering', True)        # read every cycle
         self.declare_parameter('ramp_together', True)            # read every cycle
-        self.declare_parameter('limit_margin', 0.15)             # read every cycle
+        self.declare_parameter('limit_margin', 0.35)             # read every cycle
         self.tolerance = self.declare_parameter('steer_tolerance', 0.05).value   # [rad]
         self.measured = None     # measured steering angle per module, from /joint_states
 

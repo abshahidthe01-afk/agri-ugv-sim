@@ -100,3 +100,14 @@ def test_a_block_over_two_plot_rows_goes_around_the_end_of_the_field():
     assert corners[1] == pytest.approx((beyond, -11.0))
     with pytest.raises(ValueError, match='not part of the field'):
         plan_mission([plot(99, 0.0, 0.0)], BOUNDARY, field=PLOTS)
+
+
+def test_corrections_stay_gentle_while_crabbing():
+    """Crabbing after a twist: the sideways and turn parts stay within 0.1 rad of the motion."""
+    pose = (0.0, 0.05, math.pi / 2 + math.radians(3.5))         # 5 cm off, turned 3.5 deg
+    vx, vy, wz, _ = follow(pose, (0.0, 0.0), (1.5, 0.0), math.pi / 2, 0.5)
+    along = 0.5 * math.tan(0.1)
+    world_y = math.sin(pose[2]) * vx + math.cos(pose[2]) * vy    # back towards the line
+    assert -along - 1e-9 <= world_y < 0 and abs(wz) * 0.75 <= along + 1e-9
+    vx, vy, wz, _ = follow(pose, (0.0, 0.0), (1.5, 0.0), math.pi / 2, 0.5, max_angle=1.5)
+    assert abs(wz) == pytest.approx(math.radians(3.5))           # without: k_heading x error
