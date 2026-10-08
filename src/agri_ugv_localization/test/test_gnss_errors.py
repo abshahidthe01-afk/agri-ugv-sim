@@ -75,3 +75,69 @@ def test_quaternion_turns_the_x_axis_to_yaw_and_pitch():
                 math.cos(math.radians(5)) * math.sin(math.radians(30)), -math.sin(math.radians(5)))
     assert forward == pytest.approx(expected)
     assert quaternion(0.0, 0.0, 0.0) == pytest.approx((0.0, 0.0, 0.0, 1.0))
+
+
+def shared_errors(errors, start, seconds, rate=10.0):
+    """Return the shared (east, north, up) error at each fix time (own noise switched off)."""
+    return np.array([errors.error(start + k / rate) for k in range(int(seconds * rate))])
+
+
+def test_fixed_quality_gives_the_same_errors_as_before():
+    errors = RtkErrors(seed=1)
+    values = [errors.error(0.1 * k) for k in range(3) for _ in range(2)]
+    assert values[0][0] == pytest.approx(-0.0004536, abs=1e-7)
+    assert values[-1] == pytest.approx([-0.0049708, 0.0023898, 0.0061772], abs=1e-7)
+
+
+def test_float_drifts_from_where_it_was_towards_decimetres():
+    errors = RtkErrors(own_sigma=(0.0, 0.0, 0.0), seed=5)
+    before = shared_errors(errors, 0.0, 10.0)[-1]
+    assert errors.set_quality('float') and not errors.set_quality('float')
+    after = shared_errors(errors, 10.0, 0.2)
+    assert np.linalg.norm(after[0, :2] - before[:2]) < 0.04     # no jump: ~1.2 cm per 0.1 s
+    assert errors.variance() == pytest.approx([0.04, 0.04, 0.16])
+    finals = []
+    for seed in range(200):                       # spread after 3 tau: as float_sigma
+        errors = RtkErrors(own_sigma=(0.0, 0.0, 0.0), seed=seed)
+        errors.error(0.0)
+        errors.set_quality('float')
+        finals.append(shared_errors(errors, 0.1, 180.0, rate=1.0)[-1])
+    assert np.std(finals, axis=0) == pytest.approx([0.20, 0.20, 0.40], rel=0.15)
+
+
+def test_a_new_fix_starts_afresh_and_an_outage_gives_no_fixes():
+    spreads = {'fixed': [], 'after none': []}
+    for seed in range(300):
+        errors = RtkErrors(own_sigma=(0.0, 0.0, 0.0), seed=seed)
+        errors.set_quality('float')
+        shared_errors(errors, 0.0, 120.0, rate=1.0)
+        errors.set_quality('fixed')                              # fixed again: a snap
+        spreads['fixed'].append(errors.error(120.1))
+        errors.set_quality('none')
+        assert errors.error(121.0) is None
+        errors.set_quality('fixed')
+        spreads['after none'].append(errors.error(130.0))
+    for values in spreads.values():
+        assert np.std(values, axis=0) == pytest.approx([0.01, 0.01, 0.02], rel=0.15)
+
+
+def test_runs_that_switch_at_the_same_moment_meet_the_same_errors():
+    runs = []
+    for seed in (1, 1):
+        errors = RtkErrors(seed=seed)
+        shared_errors(errors, 0.0, 30.0)
+        errors.set_quality('float')
+        runs.append(shared_errors(errors, 30.0, 60.0))
+    assert np.array_equal(runs[0], runs[1])
+    other = RtkErrors(seed=1)
+    shared_errors(other, 0.0, 41.3)                  # switched at another time of the run
+    other.set_quality('float')
+    later = shared_errors(other, 41.3, 60.0)
+    assert np.max(np.abs(later - runs[0])) < 0.03      # only the start differs, and fades
+
+
+def test_bad_qualities_and_float_sizes_are_refused():
+    with pytest.raises(ValueError):
+        RtkErrors().set_quality('rtk')
+    with pytest.raises(ValueError):
+        RtkErrors(float_sigma=(0.2, -0.2, 0.4))

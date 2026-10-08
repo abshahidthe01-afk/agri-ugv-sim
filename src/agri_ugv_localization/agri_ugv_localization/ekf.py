@@ -4,7 +4,8 @@ A 2D extended Kalman filter for the robot's pose: position, heading and gyro bia
 State x = [px, py, yaw, gyro_bias, gnss_east, gnss_north] in the world frame (metres,
 radians, rad/s, metres). The last two are the GNSS error shared by both antennas: it drifts
 slowly, so the filter models it instead of trusting every fix as independent; otherwise it
-would report a position five times more certain than it is.
+would report a position five times more certain than it is. How far it drifts depends on
+the GNSS quality (set_gnss_sigma); a new GNSS solution starts it afresh (restart_gnss).
 Predict: wheel odometry gives the body velocity (how far), the gyroscope the turn rate
 (how much it turned); both carry noise, so the uncertainty P grows. Correct: a GNSS
 antenna position or the dual-antenna heading pulls the state towards the measurement,
@@ -78,6 +79,25 @@ class PoseEkf:
         H = np.array([[1.0, 0.0, -s * lever[0] - c * lever[1], 0.0, 1.0, 0.0],
                       [0.0, 1.0, c * lever[0] - s * lever[1], 0.0, 0.0, 1.0]])
         self._correct(np.asarray(measured) - predicted, H, np.asarray(covariance))
+
+    def set_gnss_sigma(self, sigma):
+        """Let the shared GNSS error drift with spread sigma [m] from now on (keeps its value)."""
+        if sigma <= 0:
+            raise ValueError(f'sigma must be positive, got {sigma}')
+        self.gnss_sigma = float(sigma)
+
+    def restart_gnss(self, sigma):
+        """
+        Start the shared GNSS error afresh, for a new GNSS solution: spread sigma [m].
+
+        Its old value says nothing about the new one: value 0, variance sigma^2, unrelated
+        to the pose. The pose stays as it is; the next fixes pull it.
+        """
+        self.set_gnss_sigma(sigma)
+        self.x[4:] = 0.0
+        self.P[4:, :] = 0.0
+        self.P[:, 4:] = 0.0
+        self.P[4, 4] = self.P[5, 5] = self.gnss_sigma ** 2
 
     def update_yaw(self, measured, variance):
         """Correct with a measured heading [rad] and its variance."""

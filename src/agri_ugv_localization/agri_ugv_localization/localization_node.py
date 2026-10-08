@@ -6,7 +6,12 @@ Subscribes:  /robot_description (latched)   antenna offsets
              /wheel/odom                    body velocity
              /gnss/front/fix, /gnss/rear/fix, /gnss/heading   corrections at 10 Hz
 Publishes:   /localization/odometry (nav_msgs/Odometry) pose in the world frame 'map'
-Parameters:  world_file (its <spherical_coordinates>), the GNSS error model
+Parameters:  world_file (its <spherical_coordinates>), the GNSS error model:
+             gnss_shared_sigma, gnss_shared_tau, gnss_own_sigma. The shared error's spread
+             follows the accuracy each fix reports (its covariance) when it reports one:
+             worse fixes let it drift further; better fixes, or fixes again after more than
+             gnss_restart_gap [s] without, are a new solution: it starts afresh. Messages
+             without a fix (status STATUS_NO_FIX) are ignored: wheels and gyro carry on.
              tilt_from_gyro (true): roll and pitch from the gyro, pulled towards gravity
              and the GNSS pitch with time constant tilt_gyro_time [s] (TiltEstimator);
              false: roll = accelerometer and pitch = GNSS pitch, each smoothed with
@@ -28,7 +33,7 @@ from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
-from sensor_msgs.msg import Imu, NavSatFix
+from sensor_msgs.msg import Imu, NavSatFix, NavSatStatus
 from std_msgs.msg import String
 
 ANTENNAS = {'front': 'gnss_front_link', 'rear': 'gnss_rear_link'}
@@ -52,6 +57,7 @@ class LocalizationNode(Node):
         self.declare_parameter('wheel_slip_speed', 0.5)          # read at every IMU sample
         self.declare_parameter('wheel_slip_turn', 1.0)
         self.declare_parameter('tilt_from_gyro', True)           # read at every use
+        self.declare_parameter('gnss_restart_gap', 1.0)          # read at every fix
         self.tilt = TiltEstimator(self.declare_parameter('tilt_gyro_time', 10.0).value)
         self.acceleration, self.last_wheels, self.last_heading = (0.0, 0.0), None, None
         self.rate, self.ages = 0.0, []
@@ -64,6 +70,7 @@ class LocalizationNode(Node):
         self.levers, self.ekf, self.last_imu = None, None, None
         self.velocity, self.speed_sigma = (0.0, 0.0), 0.05
         self.pitch, self.roll, self.fixes = 0.0, 0.0, {}
+        self.gnss_sigma, self.last_fix, self.no_fix_since = p['gnss_shared_sigma'], None, None
         self.publisher = self.create_publisher(Odometry, '/localization/odometry', 10)
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(String, '/robot_description', self.on_description, latched)
@@ -146,7 +153,7 @@ class LocalizationNode(Node):
             c, s = math.cos(yaw), math.sin(yaw)
             self.ekf = PoseEkf(x - c * fx + s * fy, y - s * fx - c * fy, yaw,
                                0.02, math.sqrt(variance),
-                               gnss_sigma=self.params['gnss_shared_sigma'],
+                               gnss_sigma=self.gnss_sigma,
                                gnss_tau=self.params['gnss_shared_tau'])
             self.get_logger().info(f'started at x {self.ekf.x[0]:.3f} y {self.ekf.x[1]:.3f} '
                                    f'yaw {math.degrees(yaw):.2f} deg')
@@ -157,12 +164,46 @@ class LocalizationNode(Node):
             return 0.0
         return max(0.0, self.last_imu - stamp_seconds(msg))
 
+    def shared_sigma(self, msg):
+        """Return the spread [m] of the shared GNSS error, from the accuracy a fix reports."""
+        if msg.position_covariance_type == NavSatFix.COVARIANCE_TYPE_UNKNOWN:
+            return self.params['gnss_shared_sigma']
+        horizontal = (msg.position_covariance[0] + msg.position_covariance[4]) / 2
+        return math.sqrt(max(horizontal - self.params['gnss_own_sigma'] ** 2, 1e-6))
+
+    def follow_gnss(self, time):
+        """Adapt the filter's shared GNSS error to the reported accuracy and to outages."""
+        gap = None if self.last_fix is None else time - self.last_fix
+        self.last_fix = time if gap is None else max(self.last_fix, time)
+        sigma, current = self.gnss_sigma, self.ekf.gnss_sigma
+        if gap is not None and gap > self.get_parameter('gnss_restart_gap').value:
+            self.ekf.restart_gnss(sigma)
+            self.get_logger().info(f'GNSS: fixes again after {gap:.1f} s: a new solution, '
+                                   f'shared error {100 * sigma:.1f} cm')
+        elif sigma < current / 1.05:
+            self.ekf.restart_gnss(sigma)
+            self.get_logger().info(f'GNSS: better fixes, a new solution: shared error '
+                                   f'{100 * sigma:.1f} cm')
+        elif sigma > current * 1.05:
+            self.ekf.set_gnss_sigma(sigma)
+            self.get_logger().info(f'GNSS: worse fixes: the shared error may drift to '
+                                   f'{100 * sigma:.1f} cm')
+
     def on_fix(self, name, msg):
         """Correct with one antenna's position, moved forward by the motion since it was taken."""
+        if msg.status.status < NavSatStatus.STATUS_FIX:
+            self.fixes.pop(name, None)
+            if self.no_fix_since is None:
+                self.no_fix_since = stamp_seconds(msg)
+                self.get_logger().info('GNSS: no fix: carrying on with wheels and gyro')
+            return
+        self.no_fix_since = None
+        self.gnss_sigma = self.shared_sigma(msg)
         x, y, _ = world_from_fix(self.origin, (msg.latitude, msg.longitude, msg.altitude))
         self.fixes[name] = (x, y)
         if self.ekf is None or self.levers is None:
             return
+        self.follow_gnss(stamp_seconds(msg))
         if self.last_imu is not None:
             self.ages.append(self.last_imu - stamp_seconds(msg))
             if len(self.ages) == 200:

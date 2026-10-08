@@ -34,24 +34,60 @@ class GaussMarkov:
         return self.value
 
 
+QUALITIES = ('fixed', 'float', 'none')
+
+
 class RtkErrors:
     """
-    Position errors of RTK-fixed receivers on one robot, as (east, north, up) in metres.
+    Position errors of RTK receivers on one robot, as (east, north, up) in metres.
 
     All antennas share a slowly drifting error (same satellites, same corrections), plus
     small independent noise each. The shared part cancels in the heading between antennas.
+    The quality of the fixes can change (set_quality):
+      'fixed'  RTK fixed: the shared error is about a centimetre (common_sigma).
+      'float'  the base station's corrections stop arriving: the shared error drifts from
+               where it is towards decimetres (float_sigma), with the same correlation
+               time. The antennas still measure against each other: the heading stays.
+      'none'   no fix at all (error returns None).
+    Getting better (float to fixed), or a fix after 'none', is a new solution: the shared
+    error starts afresh. After every change the random numbers start again from the seed,
+    so two runs that change at the same moment meet the same errors.
     """
 
     def __init__(self, common_sigma=(0.010, 0.010, 0.020), common_tau=60.0,
-                 own_sigma=(0.003, 0.003, 0.006), seed=None):
+                 own_sigma=(0.003, 0.003, 0.006), seed=None, float_sigma=(0.20, 0.20, 0.40)):
         """Set the error sizes (metres) and the drift's correlation time (seconds)."""
+        self.seed = seed
         self.rng = np.random.default_rng(seed)
         self.common = GaussMarkov(common_sigma, common_tau, self.rng)
+        self.sigmas = {'fixed': self.common.sigma, 'float': np.asarray(float_sigma, dtype=float)}
+        if self.sigmas['float'].shape != (3,) or np.any(self.sigmas['float'] < 0):
+            raise ValueError(f'need three float sigmas >= 0, got {float_sigma}')
         self.own_sigma = np.asarray(own_sigma, dtype=float)
-        self.time = None
+        self.time, self.quality, self.changes = None, 'fixed', 0
+
+    def set_quality(self, quality):
+        """Change the quality of the fixes ('fixed', 'float' or 'none'); True if it changed."""
+        if quality not in QUALITIES:
+            raise ValueError(f'quality must be one of {", ".join(QUALITIES)}, got {quality!r}')
+        if quality == self.quality:
+            return False
+        before, self.quality = self.quality, quality
+        self.changes += 1
+        self.rng = np.random.default_rng(
+            None if self.seed is None else [self.seed, self.changes])
+        self.common.rng = self.rng
+        if quality != 'none':
+            self.common.sigma = self.sigmas[quality]
+            if before == 'none' or quality == 'fixed':          # a new solution
+                self.common.value = self.common.sigma * self.rng.standard_normal(3)
+                self.time = None
+        return True
 
     def error(self, time):
-        """Return one antenna's (east, north, up) error for a fix taken at time (seconds)."""
+        """Return one antenna's (east, north, up) error for a fix taken at time, or None."""
+        if self.quality == 'none':
+            return None
         if self.time is None:
             self.time = time
         elif time > self.time:

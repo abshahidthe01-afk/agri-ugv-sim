@@ -72,6 +72,8 @@ IMU errors per axis (assumed, typical industrial MEMS): gyroscope white noise 0.
 
 GNSS errors (assumed, typical RTK fixed): a slowly drifting error shared by both antennas (1.0 cm horizontal, 2.0 cm vertical, correlation time 60 s) plus independent noise per antenna (0.3 cm, 0.6 cm). The shared part cancels in the heading: 0.20° for the 1.20 m baseline (agri_ugv_localization).
 
+Worse GNSS on demand (parameter `quality` of `gnss_errors`, can be changed while running): `float` = the base station's corrections stop arriving; the shared error drifts from where it is towards 20 cm horizontal, 40 cm vertical (assumed, same 60 s correlation time). The two antennas still measure against each other, so the heading keeps its 0.20°. `none` = no fix: the fixes carry status `STATUS_NO_FIX` (position NaN) and there is no heading. Fixed again, or a fix after `none`, starts a new solution. Each fix reports its accuracy in its covariance; the localization follows it. After every change of quality the random errors start again from the seed, so two test runs that switch at the same moment meet the same errors.
+
 In `must_c_field`, `heading_deg` = 1.558: world x/y follow the UTM grid, which here is turned 1.558° from true east/north (meridian convergence). With it, the simulated GNSS reports each terrain point's real coordinates (within 2 cm over the field).
 
 ## Phenotyping payload (visual only)
