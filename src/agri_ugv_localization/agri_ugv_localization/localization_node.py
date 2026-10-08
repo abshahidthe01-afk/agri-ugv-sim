@@ -5,6 +5,8 @@ Subscribes:  /robot_description (latched)   antenna offsets
              /imu                           gyro (predict at 100 Hz) and accelerometer (roll)
              /wheel/odom                    body velocity
              /gnss/front/fix, /gnss/rear/fix, /gnss/heading   corrections at 10 Hz
+             /rows/measurement (std_msgs/String, JSON)       the robot's place across the
+                                            crop rows in the LiDAR (agri_ugv_navigation rows)
 Publishes:   /localization/odometry (nav_msgs/Odometry) pose in the world frame 'map'
 Parameters:  world_file (its <spherical_coordinates>), the GNSS error model:
              gnss_shared_sigma, gnss_shared_tau, gnss_own_sigma. The shared error's spread
@@ -20,10 +22,15 @@ Parameters:  world_file (its <spherical_coordinates>), the GNSS error model:
              since it was taken (fixes arrive later than the IMU that drives the filter)
              wheel_slip_speed, wheel_slip_turn: trust the wheels less at speed and while
              turning (the gyro sees turns, the wheels miss the slides that come with them)
+             use_rows (true, read at every row measurement): correct the position across
+             the crop rows when the row was found; rows_sigma [m] (0.02) is a measurement's
+             uncertainty, and one further than rows_gate (3) of the combined uncertainties
+             from the estimate is refused
 
 The IMU's own orientation output is not used: in Gazebo it is perfect, a real one is not.
 """
 
+import json
 import math
 
 from agri_ugv_localization.ekf import (own_acceleration, PoseEkf, tilted_lever, TiltEstimator,
@@ -58,6 +65,10 @@ class LocalizationNode(Node):
         self.declare_parameter('wheel_slip_turn', 1.0)
         self.declare_parameter('tilt_from_gyro', True)           # read at every use
         self.declare_parameter('gnss_restart_gap', 1.0)          # read at every fix
+        self.declare_parameter('use_rows', True)                 # read at every row measurement
+        self.declare_parameter('rows_sigma', 0.02)
+        self.declare_parameter('rows_gate', 3.0)
+        self.rows = {'used': 0, 'refused': 0, 'moved': 0.0}
         self.tilt = TiltEstimator(self.declare_parameter('tilt_gyro_time', 10.0).value)
         self.acceleration, self.last_wheels, self.last_heading = (0.0, 0.0), None, None
         self.rate, self.ages = 0.0, []
@@ -80,6 +91,7 @@ class LocalizationNode(Node):
         for name in ANTENNAS:
             self.create_subscription(NavSatFix, f'/gnss/{name}/fix',
                                      lambda msg, n=name: self.on_fix(n, msg), 10)
+        self.create_subscription(String, '/rows/measurement', self.on_rows, 10)
 
     def on_description(self, msg):
         """Read where the antennas sit on the robot."""
@@ -218,6 +230,38 @@ class LocalizationNode(Node):
         own = self.params['gnss_own_sigma'] ** 2
         self.ekf.update_position((x, y), tilted_lever(self.levers[name], *self.tilt_angles()),
                                  [[own, 0.0], [0.0, own]])
+
+    def on_rows(self, msg):
+        """Correct the position across the crop rows with a row measurement of the LiDAR."""
+        if self.ekf is None or not self.get_parameter('use_rows').value:
+            return
+        m = json.loads(msg.data)
+        if m['left_plot'] is None:                    # which row is not clear
+            return
+        (dx, dy), (x, y) = m['left_dir'], m['pose'][:2]
+        measured = dx * x + dy * y + m['left_plot']   # the true robot, across the rows
+        age = 0.0
+        if self.last_imu is not None and self.get_parameter('latency_compensation').value:
+            age = max(0.0, self.last_imu - m['t'])    # it has moved on since the scan
+        yaw = self.ekf.x[2]
+        vx, vy = self.velocity
+        measured += (dx * (math.cos(yaw) * vx - math.sin(yaw) * vy)
+                     + dy * (math.sin(yaw) * vx + math.cos(yaw) * vy)) * age
+        value, variance = self.ekf.along((dx, dy))
+        sigma = self.get_parameter('rows_sigma').value
+        if (measured - value) ** 2 > self.get_parameter('rows_gate').value ** 2 * (
+                variance + sigma ** 2):
+            self.rows['refused'] += 1
+        else:
+            self.ekf.update_along((dx, dy), measured, sigma ** 2)
+            self.rows['used'] += 1
+            self.rows['moved'] += abs(measured - value)
+        if self.rows['used'] + self.rows['refused'] == 100:
+            self.get_logger().info(
+                f'Rows: {self.rows["used"]} corrections across the crop rows (mean '
+                f'{100 * self.rows["moved"] / max(1, self.rows["used"]):.1f} cm), '
+                f'{self.rows["refused"]} refused as too far off')
+            self.rows = {'used': 0, 'refused': 0, 'moved': 0.0}
 
     def publish(self, stamp, gyro):
         """Publish the current estimate with its uncertainty."""

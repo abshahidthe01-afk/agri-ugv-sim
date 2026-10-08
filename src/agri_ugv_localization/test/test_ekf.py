@@ -206,3 +206,24 @@ def test_the_filter_stays_honest_in_float_and_snaps_back_when_fixed_again():
     assert np.mean(errors) > 0.10                # float costs decimetres
     assert 0.3 < np.mean(ratios) < 3.0           # honest: error^2 about the variance
     assert max(after) < 0.04
+
+
+def test_a_measurement_across_the_rows_moves_the_robot_across_and_reveals_the_gnss_error():
+    """Float GNSS 20 cm off to the north: the filter shares it between pose and GNSS error."""
+    ekf = PoseEkf(0.0, 0.0, 0.0, 0.01, 0.001, gnss_sigma=0.01)
+    ekf.set_gnss_sigma(0.2)
+    sigma_speed = wheel_speed_sigma(0.02, 0.5, 0.0, 0.5, 1.0)      # as when driving
+    for _ in range(600):                                   # 6 s without fixes, then 10 s with
+        ekf.predict(0.01, 0.0, 0.0, 0.0, sigma_speed, 0.0005)
+    for _ in range(1000):
+        ekf.predict(0.01, 0.0, 0.0, 0.0, sigma_speed, 0.0005)
+        for lever in ((0.6, 0.0), (-0.6, 0.0)):
+            ekf.update_position((lever[0], 0.2), lever, np.diag([9e-6, 9e-6]))
+    assert ekf.x[1] > 0.05                                 # pulled off by the GNSS error
+    value, variance = ekf.along((0.0, 1.0))
+    assert value == pytest.approx(ekf.x[1]) and variance == pytest.approx(ekf.P[1, 1])
+    east = ekf.x[0]
+    ekf.update_along((0.0, 1.0), 0.0, 0.02 ** 2)          # the rows: the robot is at y = 0
+    assert ekf.x[1] == pytest.approx(0.0, abs=0.01)
+    assert ekf.x[5] == pytest.approx(0.2, abs=0.02)        # so the GNSS is 20 cm off north
+    assert ekf.x[0] == pytest.approx(east, abs=1e-3)

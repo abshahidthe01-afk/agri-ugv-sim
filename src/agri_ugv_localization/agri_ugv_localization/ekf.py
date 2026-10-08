@@ -99,6 +99,23 @@ class PoseEkf:
         self.P[:, 4:] = 0.0
         self.P[4, 4] = self.P[5, 5] = self.gnss_sigma ** 2
 
+    def along(self, direction):
+        """Return (value, variance) of the estimated position along a world direction."""
+        d = np.asarray(direction, dtype=float)
+        return float(d @ self.x[:2]), float(d @ self.P[:2, :2] @ d)
+
+    def update_along(self, direction, measured, variance):
+        """
+        Correct with the robot's position measured along a world direction (unit vector).
+
+        For example across crop rows, seen by the LiDAR: the rows are where the map puts
+        them, so this is the robot's own position, without the shared GNSS error; with the
+        GNSS fixes it also tells that error in this direction.
+        """
+        d = np.asarray(direction, dtype=float)
+        H = np.array([[d[0], d[1], 0.0, 0.0, 0.0, 0.0]])
+        self._correct(np.array([measured - d @ self.x[:2]]), H, np.array([[variance]]))
+
     def update_yaw(self, measured, variance):
         """Correct with a measured heading [rad] and its variance."""
         H = np.array([[0.0, 0.0, 1.0, 0.0, 0.0, 0.0]])
