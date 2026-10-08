@@ -6,7 +6,8 @@ Start the field simulation with the robot at the start of a coverage mission, an
 plots: plot_IDs separated by commas, e.g. 178,177,198,197 (default: the whole field).
 lidar: true (default) or false, with or without the 3D LiDAR on the roof.
 The robot is placed where the mission begins, facing along the crop rows; the mission
-node then waits for /mission/start (std_srvs/Trigger).
+node then waits for /mission/start (std_srvs/Trigger). The rows node measures the robot's
+place across the crop rows in the LiDAR scans (/rows/measurement).
 """
 
 import math
@@ -52,6 +53,8 @@ def mission(context):
                               'yaw': f'{yaw:.5f}'}.items()),
         Node(package='agri_ugv_navigation', executable='mission', output='screen',
              parameters=[parameters]),
+        Node(package='agri_ugv_navigation', executable='rows', output='screen',
+             parameters=[{'use_sim_time': True}]),
     ]
 
 

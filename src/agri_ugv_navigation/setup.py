@@ -17,12 +17,13 @@ setup(
     zip_safe=True,
     maintainer='Abdullah Bin Shahid',
     maintainer_email='abshahidthe01@gmail.com',
-    description='Navigation: mission planning over the field and segment following.',
+    description='Navigation: mission planning, segment following, crop rows in the LiDAR.',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'mission = agri_ugv_navigation.mission_node:main',
+            'rows = agri_ugv_navigation.rows_node:main',
         ],
     },
 )

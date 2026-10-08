@@ -3,8 +3,8 @@
 import math
 
 from agri_ugv_field.plants import row_offsets
-from agri_ugv_navigation.rows import local_heights, plant_points, plot_under, \
-    row_measurement, row_pattern, wrap
+from agri_ugv_navigation.rows import local_heights, plant_points, plot_under, pose_at, \
+    row_measurement, row_pattern, which_row, wrap
 import numpy as np
 import pytest
 
@@ -18,11 +18,11 @@ def ground():
     return np.column_stack([x.ravel(), y.ravel(), np.zeros(x.size)])
 
 
-def field(plot, seed=0):
+def field(plot, seed=0, width=None):
     """Return world points of a plot's plants on its rows, and of the ground around it."""
     rng = np.random.default_rng(seed)
     points = []
-    for b in row_offsets(plot['width'], 0.45):
+    for b in row_offsets(width or plot['width'], 0.45):
         for a in np.arange(-3.9, 3.9, 0.12):         # a plant every 12 cm, 30 leaf points
             side = np.clip(rng.normal(0.0, 0.06, 30), -0.15, 0.15)
             points.append(np.column_stack([-(b + side), a + rng.uniform(-0.03, 0.03, 30),
@@ -110,3 +110,49 @@ def test_the_plot_under_the_robot_or_just_ahead():
     assert plot_under((0.3, -5.5), [SOY])['plot_id'] == 1           # in the lane, 1.5 m out
     assert plot_under((0.3, -6.5), [SOY]) is None
     assert plot_under((3.5, 0.0), [SOY]) is None                    # beside the plot
+
+
+@pytest.mark.parametrize('facing', [0.0, math.pi])
+@pytest.mark.parametrize('off', [-0.40, -0.30, 0.25, 0.35])
+def test_the_right_row_is_found_when_the_estimate_is_far_off(facing, off):
+    """Off by more than half the 45 cm spacing: the rows alone point to the wrong row."""
+    true = (0.3, -2.0, math.pi / 2 + facing)
+    left = np.array([-math.sin(true[2]), math.cos(true[2])])
+    estimate = (true[0] - off * left[0], true[1] - off * left[1], true[2])
+    m = row_measurement(seen_from(field(SOY), true), estimate, SOY)
+    assert abs(m['left'] - off) == pytest.approx(0.45, abs=0.01)        # the wrong row
+    assert m['left_plot'] == pytest.approx(off, abs=0.01)
+    assert m['margin'] > 0.05 and m['left_dir'] == pytest.approx(tuple(left), abs=1e-9)
+
+
+def test_which_row_is_left_open_when_the_rows_run_on_beyond_the_plot():
+    """Plants on 27 rows, the plot's 13 in the middle: the comb fits in many places."""
+    true = (0.3, -2.0, math.pi / 2)
+    m = row_measurement(seen_from(field(SOY, width=27 * 0.45), true), true, SOY)
+    assert m['left'] == pytest.approx(0.0, abs=0.01)
+    assert m['left_plot'] is None and m['beyond'] > 0.10
+
+
+def test_which_row_counts_whole_spacings():
+    rows = np.arange(-2, 3) * 0.5                                     # 5 rows
+    plants = np.repeat(rows, 20) + 1.0                                 # seen 2 rows too far left
+    assert which_row(plants, 0.0, rows, 0.5) == (-2, pytest.approx(0.4), 0.0)
+    assert which_row(np.zeros(0), 0.0, rows, 0.5) == (0, 0.0, 0.0)
+
+
+def test_the_pose_at_a_scans_time_is_interpolated_across_pi():
+    history = [(10.0, 0.0, 0.0, math.radians(179)), (10.1, 0.1, 0.2, math.radians(-179))]
+    x, y, yaw = pose_at(history, 10.05)
+    assert (x, y) == pytest.approx((0.05, 0.1)) and abs(wrap(yaw - math.pi, 2 * math.pi)) < 1e-9
+    assert pose_at(history, 10.13) == pytest.approx((0.1, 0.2, math.radians(-179)))
+    assert pose_at(history, 10.2) is None and pose_at(history[:1], 10.0) is None
+
+
+def test_the_ground_follows_slopes_and_ignores_wheel_tracks():
+    x, y = np.meshgrid(np.arange(0.0, 6.0, 0.05), np.arange(0.0, 6.0, 0.05))
+    xy = np.column_stack([x.ravel(), y.ravel()])
+    slope = local_heights(xy, 0.08 * xy[:, 0])                      # 4.6 deg: no plants
+    assert slope.max() < 0.035                                      # the lowest point: 6.4 cm
+    track = np.where(np.abs(xy[:, 0] - 3.0) < 0.2, -0.10, 0.0)      # 10 cm deep, 40 cm wide
+    beside = local_heights(xy, track)[np.abs(xy[:, 0] - 3.0) >= 0.2]
+    assert beside.max() < 0.01
