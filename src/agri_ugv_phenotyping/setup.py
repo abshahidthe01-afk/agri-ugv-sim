@@ -23,6 +23,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'canopy_truth = agri_ugv_phenotyping.truth:main',
             'plant_map = agri_ugv_phenotyping.plant_map_node:main',
         ],
     },

@@ -5,10 +5,9 @@ from pathlib import Path
 
 from agri_ugv_field.ground import ground_height, read_obj_grid
 from agri_ugv_field.layout import read_layout_csv
-from agri_ugv_field.plants import CROPS, merge, obj_text, PARTS, plot_mesh, vertex_normals
+from agri_ugv_field.plants import CROPS, grow, merge, obj_text, PARTS, vertex_normals
 from agri_ugv_field.textures import draw_texture
 from agri_ugv_terrain.heightfield import model_config
-import numpy as np
 
 
 def plants_sdf(name, meshes):
@@ -72,13 +71,9 @@ def main(argv=None):
     def ground(x, y):
         return ground_height(grid, x, y)
 
-    rng = np.random.default_rng(args.seed)
     pieces, textures, stats = {}, {}, {}
-    for plot in plots:
-        if plot['crop'] not in CROPS:
-            raise ValueError(f'plot {plot["plot_id"]}: no parameters for crop {plot["crop"]!r}')
+    for plot, meshes, count in grow(plots, ground, args.seed):
         crop = CROPS[plot['crop']]
-        meshes, count = plot_mesh(plot, crop, ground, rng)
         for part, mesh in meshes.items():
             pieces.setdefault(crop['key'] + part, []).append(mesh)
             textures[crop['key'] + part] = PARTS[crop['shape']][part]

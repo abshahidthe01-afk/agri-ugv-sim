@@ -196,6 +196,21 @@ def plot_mesh(plot, crop, ground, rng, margin=0.05):
     return {'_rows': merge(strips), '_canopy': canopy}, len(strips)
 
 
+def grow(plots, ground, seed=1):
+    """
+    Yield (plot, meshes, count) for every plot in turn (plot_mesh), from one random generator.
+
+    The same plots, ground and seed grow the same plants: make_plants writes them as the
+    Gazebo model, agri_ugv_phenotyping grows them again to measure their true canopy.
+    """
+    rng = np.random.default_rng(seed)
+    for plot in plots:
+        if plot['crop'] not in CROPS:
+            raise ValueError(f'plot {plot["plot_id"]}: no parameters for crop {plot["crop"]!r}')
+        meshes, count = plot_mesh(plot, CROPS[plot['crop']], ground, rng)
+        yield plot, meshes, count
+
+
 def merge(parts):
     """Join (vertices, uvs, faces) parts into one mesh, renumbering the faces."""
     if not parts:
