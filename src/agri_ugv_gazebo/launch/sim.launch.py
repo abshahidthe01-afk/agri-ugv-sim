@@ -20,7 +20,9 @@ def generate_launch_description():
     robot_description = ParameterValue(
         Command(['xacro ', model, ' controllers_file:=', controllers,
                  ' soil:=', LaunchConfiguration('soil'),
-                 ' lidar:=', LaunchConfiguration('lidar')]), value_type=str)
+                 ' lidar:=', LaunchConfiguration('lidar'),
+                 ' scanners:=', LaunchConfiguration('scanners'),
+                 ' scanner_rate:=', LaunchConfiguration('scanner_rate')]), value_type=str)
 
     def spawner(controller):
         """Ask the controller manager to load and start one controller."""
@@ -38,6 +40,12 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'lidar', default_value='true',
             description='true: the 3D LiDAR on the roof (costs rendering time), false: without'),
+        DeclareLaunchArgument(
+            'scanners', default_value='true',
+            description='true: the two laser line scanners measure (costs rendering time)'),
+        DeclareLaunchArgument(
+            'scanner_rate', default_value='10',
+            description='Profiles per second of each line scanner'),
         # Where to put the robot (default: the world origin, 10 cm above the ground there)
         DeclareLaunchArgument('x', default_value='0.0', description='Robot start x [m]'),
         DeclareLaunchArgument('y', default_value='0.0', description='Robot start y [m]'),
@@ -70,6 +78,7 @@ def generate_launch_description():
         # - the true pose and velocity of the robot, from the model's odometry plugin
         # - the IMU, and the GNSS antennas' ideal fixes (errors are added below)
         # - the LiDAR's point cloud (when it is on the robot)
+        # - the line scanners' profiles (when they measure)
         Node(package='ros_gz_bridge', executable='parameter_bridge',
              arguments=['/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock',
                         '/ground_truth/odom@nav_msgs/msg/Odometry[ignition.msgs.Odometry',
@@ -77,7 +86,9 @@ def generate_launch_description():
                         '/gnss/front/fix_ideal@sensor_msgs/msg/NavSatFix[ignition.msgs.NavSat',
                         '/gnss/rear/fix_ideal@sensor_msgs/msg/NavSatFix[ignition.msgs.NavSat',
                         '/lidar/points@sensor_msgs/msg/PointCloud2'
-                        '[ignition.msgs.PointCloudPacked']),
+                        '[ignition.msgs.PointCloudPacked',
+                        '/scanners/left@sensor_msgs/msg/LaserScan[ignition.msgs.LaserScan',
+                        '/scanners/right@sensor_msgs/msg/LaserScan[ignition.msgs.LaserScan']),
 
         # Controllers: they wait until the robot (and its controller manager) exists
         spawner('joint_state_broadcaster'),

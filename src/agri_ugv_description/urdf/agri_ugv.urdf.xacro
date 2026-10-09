@@ -13,6 +13,10 @@
   <xacro:arg name="soil" default="rigid"/>
   <!-- The 3D LiDAR on the roof (sensors.xacro); false leaves it out, e.g. to save rendering -->
   <xacro:arg name="lidar" default="true"/>
+  <!-- The two laser line scanners as sensors (sensors.xacro); false: visual only -->
+  <xacro:arg name="scanners" default="true"/>
+  <!-- their profiles per second; each one costs rendering time (the real ones: 200) -->
+  <xacro:arg name="scanner_rate" default="10"/>
   <!-- ============ Dimensions (sources: docs/robot_spec.md) ============ -->
   <xacro:property name="track"           value="1.50"/>   <!-- left-right wheel spacing -->
   <xacro:property name="wheelbase"       value="1.35"/>   <!-- front-rear steering axes -->
@@ -255,11 +259,20 @@
   <xacro:if value="$(arg lidar)">
     <xacro:lidar_sensor z="${lidar_height - wheel_radius}" mast_bottom="${box_top_z - wheel_radius}"
                         rate="10"/>
-    <xacro:rendering_system/>
   </xacro:if>
 
-  <!-- ============ Phenotyping payload, visual only (payload.xacro) ============ -->
+  <!-- ============ Phenotyping payload (payload.xacro) ============ -->
   <xacro:payload roof_z="${box_top_z}"/>
+  <!-- the line scanners measure: 300 points over 35 deg each, scanner_rate per second -->
+  <xacro:if value="$(arg scanners)">
+    <xacro:line_scanner_sensor side="left" rate="$(arg scanner_rate)" samples="300"
+                               fan="${radians(35)}"/>
+    <xacro:line_scanner_sensor side="right" rate="$(arg scanner_rate)" samples="300"
+                               fan="${radians(35)}"/>
+  </xacro:if>
+  <xacro:if value="${'$(arg lidar)' in ('true', '1') or '$(arg scanners)' in ('true', '1')}">
+    <xacro:rendering_system/>
+  </xacro:if>
     <!-- ============ ros2_control (only when a controllers file is given) ============ -->
   <xacro:if value="${'$(arg controllers_file)' != ''}">
     <xacro:gazebo_control controllers_file="$(arg controllers_file)"/>

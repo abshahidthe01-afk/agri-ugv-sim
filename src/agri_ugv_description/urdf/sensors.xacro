@@ -154,7 +154,59 @@
     </gazebo>
   </xacro:macro>
 
-  <!-- Gazebo's Sensors system renders the camera-like sensors (the LiDAR) with Ogre 2 -->
+  <!-- Laser line scanner (sensor): a fan of 'samples' rays, 'fan' wide, in the plane
+       across the robot that holds the scanner's central ray (link line_scanner_<side>_link,
+       payload.xacro: 50 deg from vertical, towards the middle). Like the robot's LMI Gocator
+       2490 scanners (Esser et al. 2023): range 0.39-2 m; the fan width, the noise and the
+       profile rate (the real one: 200 per second) are assumed, the rate much lower: each
+       profile costs rendering time. Each profile is published on /scanners/<side> (LaserScan) in the
+       frame line_scanner_<side>_beam_link: x along the central ray, the fan in its x-y
+       plane. Driving along the rows, the profiles add up to the plants' 3D shape. -->
+  <xacro:macro name="line_scanner_sensor" params="side rate samples fan">
+    <link name="line_scanner_${side}_beam_link"/>
+    <joint name="line_scanner_${side}_beam_joint" type="fixed">
+      <parent link="line_scanner_${side}_link"/>
+      <child link="line_scanner_${side}_beam_link"/>
+      <origin xyz="0 0 0" rpy="${pi / 2} 0 0"/>
+    </joint>
+    <gazebo reference="line_scanner_${side}_beam_link">
+      <sensor name="line_scanner_${side}" type="gpu_lidar">
+        <always_on>true</always_on>
+        <update_rate>${rate}</update_rate>
+        <topic>/scanners/${side}</topic>
+        <ignition_frame_id>line_scanner_${side}_beam_link</ignition_frame_id>
+        <visualize>false</visualize>
+        <lidar>
+          <scan>
+            <horizontal>
+              <samples>${samples}</samples>
+              <resolution>1</resolution>
+              <min_angle>${-fan / 2}</min_angle>
+              <max_angle>${fan / 2}</max_angle>
+            </horizontal>
+            <vertical>
+              <samples>1</samples>
+              <resolution>1</resolution>
+              <min_angle>0</min_angle>
+              <max_angle>0</max_angle>
+            </vertical>
+          </scan>
+          <range>
+            <min>0.39</min>
+            <max>2.0</max>
+            <resolution>0.0001</resolution>
+          </range>
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>0.0005</stddev>
+          </noise>
+        </lidar>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+
+  <!-- Gazebo's Sensors system renders the camera-like sensors (LiDAR, line scanners) with Ogre 2 -->
   <xacro:macro name="rendering_system">
     <gazebo>
       <plugin filename="ignition-gazebo-sensors-system" name="ignition::gazebo::systems::Sensors">

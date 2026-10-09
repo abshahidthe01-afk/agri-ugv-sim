@@ -38,7 +38,8 @@ def test_payload_adds_no_mass_and_no_collision(root):
     assert sum(float(m.get('value')) for m in root.iter('mass')) == pytest.approx(280.0)
     payload = [link for link in root.findall('link') if link.get('name').startswith(
         ('dome_camera_', 'line_scanner_', 'led_panels', 'curtains', 'computers'))]
-    assert len(payload) == 25          # 20 cameras, 2 scanners, LEDs, curtains, computers
+    # 20 cameras, 2 scanners and their 2 beam frames, LEDs, curtains, computers
+    assert len(payload) == 27
     assert all(link.find('inertial') is None and link.find('collision') is None
                for link in payload)
 
@@ -54,7 +55,7 @@ def test_20_dome_cameras_inside_the_enclosure_aim_at_the_plant(root):
 
 @pytest.mark.parametrize('side, y', [('left', 0.67), ('right', -0.67)])
 def test_line_scanners_look_down_and_across_at_50_degrees(root, side, y):
-    [(xyz, view)] = poses(root, f'line_scanner_{side}').values()
+    [(xyz, view)] = poses(root, f'line_scanner_{side}_joint').values()
     assert xyz == pytest.approx([0.0, y, 1.20])
     assert math.degrees(math.acos(-view[2])) == pytest.approx(50.0)
     assert view[1] * y < 0                       # towards the middle of the robot

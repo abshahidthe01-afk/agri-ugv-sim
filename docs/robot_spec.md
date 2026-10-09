@@ -64,6 +64,7 @@ not measurements. Sinkage and rolling resistance are not modelled.
 |---|---|---|
 | IMU (accelerometer, gyroscope) | `imu_link`, under the roof at the back (0.60 m behind the centre, 1.79 m above the ground), like the real robot's inertial unit [2] | `/imu`, 100 Hz, with noise and biases |
 | 2 GNSS antennas (NavSat) | `gnss_front_link` / `gnss_rear_link`, on the roof 1.90 m above the ground, 1.20 m apart front to rear | `/gnss/front/fix`, `/gnss/rear/fix` (`fix_ideal` without errors), `/gnss/heading`, 10 Hz |
+| 2 laser line scanners, like the LMI Gocator 2490 of [2] | `line_scanner_left_beam_link` / `line_scanner_right_beam_link`, on the side panels 1.20 m above the ground, 1.34 m apart, central ray 50° from vertical towards the far side | `/scanners/left`, `/scanners/right` (LaserScan): a fan of 300 points over 35° across the robot, 0.39-2 m, noise 0.5 mm, 10 profiles per second by default (`scanner_rate`; fan, noise and rate assumed; the real ones 200 per second, but each profile costs rendering time: 30 per second overloaded the simulation); each sees from the middle to just beyond the far wheels (0.09-0.93 m on flat ground), its outermost rays the far side panel; `scanners:=false` leaves them out |
 | 3D LiDAR, like an Ouster OS0-64 (an addition: the robot of [2] is driven by hand) | `lidar_link`, on a mast at the centre of the roof, 2.70 m above the ground: its lowest beams (45° down) pass over the roof edges ahead, behind and to the sides | `/lidar/points`, 10 Hz, 1024 x 64 points, ±45° vertical, 0.3-50 m, range noise 1 cm (assumed); `lidar:=false` leaves it out |
 
 Gazebo uses the SDF default gravity of 9.8 m/s² (the suspension above was sized with 9.81; 0.1 % apart).
@@ -76,9 +77,9 @@ Worse GNSS on demand (parameter `quality` of `gnss_errors`, can be changed while
 
 In `must_c_field`, `heading_deg` = 1.558: world x/y follow the UTM grid, which here is turned 1.558° from true east/north (meridian convergence). With it, the simulated GNSS reports each terrain point's real coordinates (within 2 cm over the field).
 
-## Phenotyping payload (visual only)
+## Phenotyping payload
 
-After [2]; no extra mass (it is part of the enclosure's 100 kg) and no collision.
+After [2]; no extra mass (it is part of the enclosure's 100 kg) and no collision. The two laser line scanners measure (Sensors above); the rest is visual only.
 
 | Part | From the paper | Assumed here |
 |---|---|---|

@@ -4,6 +4,7 @@ import math
 from pathlib import Path
 from xml.etree import ElementTree
 
+import numpy as np
 import pytest
 import xacro
 
@@ -112,12 +113,64 @@ def test_lidar_is_like_an_ouster_os0_64_and_publishes_its_points():
 
 
 def test_the_lidar_and_its_rendering_system_can_be_left_out():
-    with_lidar, without = model(controllers_file='x'), model(controllers_file='x', lidar='false')
+    with_lidar = model(controllers_file='x')
     plugins = [p.get('filename') for p in with_lidar.iter('plugin')]
     assert plugins.count('ignition-gazebo-sensors-system') == 1
     [system] = [p for p in with_lidar.iter('plugin')
                 if p.get('filename') == 'ignition-gazebo-sensors-system']
     assert system.findtext('render_engine') == 'ogre2'
-    assert not [link for link in without.findall('link') if link.get('name') == 'lidar_link']
+    scanners_only = model(controllers_file='x', lidar='false')
+    assert not [link for link in scanners_only.findall('link')
+                if link.get('name') == 'lidar_link']
+    assert [p.get('filename') for p in scanners_only.iter('plugin')].count(
+        'ignition-gazebo-sensors-system') == 1                  # the scanners need it too
+    without = model(controllers_file='x', lidar='false', scanners='false')
     assert 'ignition-gazebo-sensors-system' not in {p.get('filename')
                                                     for p in without.iter('plugin')}
+    assert not [s for s in without.iter('sensor') if s.get('type') == 'gpu_lidar']
+
+
+def rotation(rpy):
+    """Return the rotation matrix of URDF roll, pitch and yaw (fixed axes x, y, z)."""
+    r, p, y = rpy
+    rx = np.array([[1, 0, 0], [0, math.cos(r), -math.sin(r)], [0, math.sin(r), math.cos(r)]])
+    ry = np.array([[math.cos(p), 0, math.sin(p)], [0, 1, 0], [-math.sin(p), 0, math.cos(p)]])
+    rz = np.array([[math.cos(y), -math.sin(y), 0], [math.sin(y), math.cos(y), 0], [0, 0, 1]])
+    return rz @ ry @ rx
+
+
+@pytest.mark.parametrize('side, y', [('left', 0.67), ('right', -0.67)])
+def test_line_scanners_measure_a_fan_across_the_robot(side, y):
+    root = model(controllers_file='x')
+    joints = {j.get('name'): j for j in root.findall('joint')}
+    turn = np.eye(3)
+    for name in (f'line_scanner_{side}_joint', f'line_scanner_{side}_beam_joint'):
+        rpy = [float(v) for v in joints[name].find('origin').get('rpy').split()]
+        turn = turn @ rotation(rpy)
+    assert joints[f'line_scanner_{side}_beam_joint'].find('parent').get('link') == \
+        f'line_scanner_{side}_link'
+    centre, fan = turn[:, 0], turn[:, 1]
+    assert math.degrees(math.acos(-centre[2])) == pytest.approx(50.0)
+    assert centre[1] * y < 0                                      # towards the far side
+    assert fan[0] == pytest.approx(0.0, abs=1e-12)                # the fan lies across
+    [sensor] = [g.find('sensor') for g in root.findall('gazebo')
+                if g.get('reference') == f'line_scanner_{side}_beam_link']
+    assert sensor.get('type') == 'gpu_lidar'
+    assert sensor.findtext('topic') == f'/scanners/{side}'
+    assert sensor.findtext('ignition_frame_id') == f'line_scanner_{side}_beam_link'
+    assert float(sensor.findtext('update_rate')) == 10.0           # scanner_rate
+    scan = sensor.find('lidar/scan')
+    assert int(scan.findtext('horizontal/samples')) == 300
+    assert int(scan.findtext('vertical/samples')) == 1
+    width = float(scan.findtext('horizontal/max_angle')) - float(
+        scan.findtext('horizontal/min_angle'))
+    assert math.degrees(width) == pytest.approx(35.0)
+    assert (float(sensor.findtext('lidar/range/min')),
+            float(sensor.findtext('lidar/range/max'))) == (0.39, 2.0)
+
+
+def test_the_scanner_rate_is_a_model_argument():
+    root = model(controllers_file='x', scanner_rate='25')
+    rates = {s.get('name'): float(s.findtext('update_rate')) for s in root.iter('sensor')
+             if s.get('name', '').startswith('line_scanner_')}
+    assert rates == {'line_scanner_left': 25.0, 'line_scanner_right': 25.0}
