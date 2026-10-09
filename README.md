@@ -20,12 +20,15 @@ rows on real terrain. ROS 2 Humble and Gazebo Fortress.
   (four-wheel steering: forwards, backwards and sideways), with steer-first driving
   and recovery from steering stalls
 - Crop damage metric: wheel travel over the crop rows
+- Plant map from the two laser line scanners: cover and canopy height per plot, compared
+  with the generated plants; crop rows in the map show localization errors
+  ([plant map](docs/plant_map.md))
 
 First whole-field run (baseline, all 80 plots, 4.2 km): 643 of 643 segments in 2.85 h
 of simulated time; localization error 1.9 cm mean; wheels crushed plants on 32.5 % of
 their travel inside plots, 92 % of that in the dense cereal and mixture plots.
 
-Next: row-aware passes, LiDAR row following, the phenotyping scanners as sensors.
+Next: row-aware passes, LiDAR row following.
 
 ## Quick start
 
