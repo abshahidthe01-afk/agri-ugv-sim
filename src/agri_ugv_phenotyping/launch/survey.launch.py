@@ -25,7 +25,7 @@ MISSION_ARGUMENTS = [
     ('lidar', 'true', 'true: with the 3D LiDAR on the roof, false: without'),
     ('scanners', 'true', 'true: the laser line scanners measure, false: not'),
     ('scanner_rate', '10', 'Profiles per second of each line scanner'),
-    ('controller', 'python', 'Four-wheel-steering driver: python or cpp'),
+    ('controller', 'cpp', 'Four-wheel-steering driver: cpp or python'),
 ]
 
 

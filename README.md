@@ -10,6 +10,11 @@ rows on real terrain. ROS 2 Humble and Gazebo Fortress.
 - Thorvald-style robot model with suspension ([robot spec](docs/robot_spec.md))
 - Four-wheel-steering kinematics, unit-tested
 - Gazebo simulation with ros2_control, speed limits and a watchdog
+- Four-wheel-steering driver as a C++ ros2_control controller (steer first, speed
+  limits, stall recovery, wheel odometry); the same logic as the Python driver nodes,
+  which remain an option (`controller:=python`). On plot 198 both drive the same
+  (102.7 / 102.8 s, 1.3 / 1.4 cm from the line), and without the two Python nodes the
+  simulation runs faster (real-time factor 0.64 against 0.57)
 - Ground-truth pose and velocity from Gazebo
 - Terrain generator: test terrains and the real MuST-C field from drone elevation data
 - Field: the 80 plots of the real MuST-C trial from its official shapefile, with

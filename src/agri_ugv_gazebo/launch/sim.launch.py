@@ -60,10 +60,10 @@ def generate_launch_description():
             'scanner_rate', default_value='10',
             description='Profiles per second of each line scanner'),
         DeclareLaunchArgument(
-            'controller', default_value='python', choices=['python', 'cpp'],
-            description='Four-wheel-steering driver: python (joint group controllers, '
-                        'four_ws_driver and wheel_odometry nodes) or cpp (agri_ugv_four_ws '
-                        'controller in the controller manager)'),
+            'controller', default_value='cpp', choices=['cpp', 'python'],
+            description='Four-wheel-steering driver: cpp (agri_ugv_four_ws controller in the '
+                        'controller manager) or python (joint group controllers, '
+                        'four_ws_driver and wheel_odometry nodes)'),
         # Where to put the robot (default: the world origin, 10 cm above the ground there)
         DeclareLaunchArgument('x', default_value='0.0', description='Robot start x [m]'),
         DeclareLaunchArgument('y', default_value='0.0', description='Robot start y [m]'),
