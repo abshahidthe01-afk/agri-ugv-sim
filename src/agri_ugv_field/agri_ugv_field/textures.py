@@ -155,3 +155,17 @@ TEXTURES = {'sugar_beet_leaf': sugar_beet_leaf, 'maize_leaf': maize_leaf,
 def draw_texture(name, seed=1):
     """Return texture 'name' as an RGBA image; the same seed draws the same picture."""
     return TEXTURES[name](np.random.default_rng(seed))
+
+
+def opaque(image, threshold=128):
+    """Return the mask of an RGBA image's drawn pixels (alpha at least threshold of 255)."""
+    return np.asarray(image)[:, :, 3] >= threshold
+
+
+def leaf_outlines(seed=1, bands=None):
+    """Return {texture: leaf_outline} of the single leaves' textures (PARTS[shape][''])."""
+    from agri_ugv_field.plants import BANDS, leaf_outline, PARTS
+
+    names = {parts[''] for parts in PARTS.values() if '' in parts}
+    return {name: leaf_outline(opaque(draw_texture(name, seed)), bands or BANDS)
+            for name in sorted(names)}

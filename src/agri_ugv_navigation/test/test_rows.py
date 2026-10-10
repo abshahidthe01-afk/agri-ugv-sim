@@ -64,6 +64,16 @@ def test_rows_are_found_with_their_direction_and_offset():
     assert shift == pytest.approx(0.0, abs=0.005)
 
 
+def test_points_off_their_rows_away_from_the_lidar_are_undone_too():
+    rows = [(a, 0.2 + k * 0.5) for a in np.arange(3.0, 9.0, 0.05) for k in range(-4, 4)]
+    xy = np.array(rows)
+    sine = xy[:, 1] / np.hypot(xy[:, 0], xy[:, 1])
+    away = xy + np.column_stack([np.zeros(len(xy)), 0.03 * sine])     # 3 cm times the sine
+    angle, offset, strength, shift = row_pattern(away, 0.5)
+    assert shift == pytest.approx(-0.03, abs=0.005)
+    assert offset == pytest.approx(0.2, abs=0.003)
+
+
 @pytest.mark.parametrize('facing', [0.0, math.pi])
 def test_the_robot_is_found_across_the_rows(facing):
     """The estimate puts the robot 8 cm too far left and 0.5 deg turned too far."""

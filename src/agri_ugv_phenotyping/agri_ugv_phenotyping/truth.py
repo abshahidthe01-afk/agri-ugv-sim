@@ -82,18 +82,18 @@ def traits(top, low=0.06, cells=None):
 
 def true_canopy(plots, ground, ids, seed=1, cell=0.05, step=0.01):
     """Return {plot_id: highest leaf per cell above the ground} for the plots 'ids'."""
-    from agri_ugv_field.textures import draw_texture     # Pillow: only needed here
+    from agri_ugv_field.textures import draw_texture, leaf_outlines, opaque   # Pillow
 
     alpha = {}
     tops = {}
-    for plot, meshes, _ in grow(plots, ground, seed):
+    for plot, meshes, _ in grow(plots, ground, seed, leaf_outlines(seed)):
         if plot['plot_id'] not in ids:
             continue
         points = []
         for part, (vertices, uvs, faces) in meshes.items():
             texture = PARTS[CROPS[plot['crop']]['shape']][part]
             if texture not in alpha:
-                alpha[texture] = np.asarray(draw_texture(texture, seed))[:, :, 3] >= 128
+                alpha[texture] = opaque(draw_texture(texture, seed))
             points.append(leaf_points(vertices, uvs, faces, alpha[texture], step))
         tops[plot['plot_id']] = canopy_top(plot, np.vstack(points), ground, cell)
     return tops

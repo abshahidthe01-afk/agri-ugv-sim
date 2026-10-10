@@ -35,7 +35,7 @@ def field(folder, crops):
             '--name', 'plants', '--output-dir', str(folder)]
 
 
-def test_plants_model_has_textured_double_sided_meshes(tmp_path):
+def test_plants_model_has_one_textured_mesh_per_plot_and_part(tmp_path):
     pytest.importorskip('PIL')
     main(field(tmp_path, ['Sugar Beet', 'Summerwheat']))
     model_dir = tmp_path / 'plants'
@@ -43,9 +43,9 @@ def test_plants_model_has_textured_double_sided_meshes(tmp_path):
     assert model.find('static').text == 'true'
     assert model.find('link/collision') is None
     visuals = {v.get('name'): v for v in model.findall('link/visual')}
-    assert sorted(visuals) == ['sugar_beet', 'wheat_canopy', 'wheat_rows']
+    assert sorted(visuals) == ['sugar_beet_100', 'wheat_canopy_101', 'wheat_rows_101']
     for name, visual in visuals.items():
-        assert visual.find('material/double_sided').text == 'true'
+        assert visual.find('material/double_sided').text == 'false'     # both sides in the mesh
         texture = visual.find('material/pbr/metal/albedo_map').text
         assert (model_dir / texture).is_file()
         obj = (model_dir / 'meshes' / f'{name}.obj').read_text().splitlines()
@@ -57,3 +57,13 @@ def test_plants_model_has_textured_double_sided_meshes(tmp_path):
 def test_an_unknown_crop_is_refused(tmp_path):
     with pytest.raises(ValueError, match='Rice'):
         main(field(tmp_path, ['Rice']))
+
+
+def test_a_new_run_replaces_the_meshes_of_an_earlier_one(tmp_path):
+    pytest.importorskip('PIL')
+    args = field(tmp_path, ['Sugar Beet'])
+    (tmp_path / 'plants' / 'meshes').mkdir(parents=True)
+    (tmp_path / 'plants' / 'meshes' / 'sugar_beet.obj').write_text('old')
+    main(args)
+    assert sorted(p.name for p in (tmp_path / 'plants' / 'meshes').iterdir()) == [
+        'sugar_beet_100.obj']

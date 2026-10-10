@@ -2,8 +2,9 @@
 
 import math
 
-from agri_ugv_field.plants import (CROPS, leaves, merge, obj_text, PARTS, plant, plant_offsets,
-                                   plot_mesh, row_offsets, row_strip, vertex_normals)
+from agri_ugv_field.plants import (CROPS, grow, leaf_outline, leaves, merge, obj_text, PARTS,
+                                   plant, plant_offsets, plot_mesh, row_offsets, row_strip,
+                                   two_sided, vertex_normals)
 from agri_ugv_field.textures import TEXTURES
 import numpy as np
 import pytest
@@ -80,6 +81,8 @@ def test_a_row_strip_stands_on_the_ground_and_repeats_its_picture_every_metre():
 def test_single_plants_stand_in_rows_inside_the_plot():
     meshes, count = plot_mesh(PLOT, CROPS['Sugar Beet'], flat, np.random.default_rng(1))
     vertices, uvs, faces = meshes['']
+    assert np.array_equal(faces[len(faces) // 2:], faces[:len(faces) // 2, ::-1] +
+                          len(vertices) // 2)                          # every face both ways
     along, across = plot_coordinates(vertices)
     assert 12 * 30 <= count <= 12 * 38
     assert np.abs(along).max() < 7.7 / 2 + 0.3 and np.abs(across).max() < 3.0 + 0.1
@@ -116,3 +119,57 @@ def test_vertex_normals_are_unit_vectors_pointing_up_on_flat_ground():
     vertices = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]])
     normals = vertex_normals(vertices, np.array([[0, 1, 2], [0, 2, 3]]))
     assert normals == pytest.approx(np.tile([0.0, 0.0, 1.0], (4, 1)))
+
+
+def test_a_leaf_outline_gives_the_drawn_width_of_each_band_from_the_base():
+    opaque = np.zeros((8, 10), dtype=bool)
+    opaque[0:4, 4:6] = True                     # upper half (towards the tip): narrow
+    opaque[4:8, 1:9] = True                     # lower half (the base): wide
+    opaque[5, 9] = True
+    assert leaf_outline(opaque, 2) == pytest.approx(np.array([[0.1, 1.0], [0.4, 0.6]]))
+    assert leaf_outline(np.zeros((4, 4), dtype=bool), 2) == pytest.approx(np.full((2, 2), 0.5))
+
+
+def test_an_outlined_leaf_is_one_quad_per_band_as_wide_as_the_drawn_leaf():
+    outline = np.array([[0.4, 0.6], [0.0, 1.0], [0.25, 0.75]])
+    vertices, uvs, faces = leaves(0.0, 1.0, 0.2, 0.0, 0.0, outline=outline)  # flat, along +x
+    assert vertices.shape == (12, 3) and faces.shape == (6, 3)
+    quads = vertices.reshape(3, 4, 3)
+    assert quads[:, :, 1].min(axis=1) == pytest.approx([-0.02, -0.1, -0.05])
+    assert quads[:, :, 1].max(axis=1) == pytest.approx([0.02, 0.1, 0.05])
+    assert quads[:, :, 0].min(axis=1) == pytest.approx([0.0, 1 / 3, 2 / 3])
+    assert uvs.reshape(3, 4, 2)[1] == pytest.approx(
+        np.array([[0.0, 1 / 3], [1.0, 1 / 3], [0.0, 2 / 3], [1.0, 2 / 3]]))
+    plain_v, _, plain_f = leaves(0.0, 1.0, 0.2, 0.0, 0.0)
+    for v, f in ((vertices, faces), (plain_v, plain_f)):    # the same winding as plain strips
+        edges = v[f[:, 1:]] - v[f[:, :1]]
+        assert (np.cross(edges[:, 0], edges[:, 1])[:, 2] < 0).all()
+
+
+def test_two_sided_meshes_face_both_ways_on_their_own_vertices():
+    mesh = (np.array([[0.0, 0, 0], [1, 0, 0], [0, 1, 0]]), np.zeros((3, 2)),
+            np.array([[0, 1, 2]]))
+    vertices, uvs, faces = two_sided(mesh)
+    assert len(vertices) == 6 and faces.tolist() == [[0, 1, 2], [5, 4, 3]]
+    normals = vertex_normals(vertices, faces)
+    assert normals[:, 2] == pytest.approx([1.0] * 3 + [-1.0] * 3)
+
+
+@pytest.mark.parametrize('name', ['Sugar Beet', 'Sugar Corn', 'Potato', 'Soybean'])
+def test_outlined_plants_keep_their_height_and_use_the_same_random_numbers(name):
+    crop = CROPS[name]
+    outline = np.array([[0.45, 0.55], [0.1, 0.9], [0.2, 0.8], [0.4, 0.6]])
+    a, b = np.random.default_rng(3), np.random.default_rng(3)
+    shaped = plant(crop['shape'], crop['height'], a, outline)
+    plant(crop['shape'], crop['height'], b)
+    assert shaped[0][:, 2].max() == pytest.approx(crop['height'])
+    assert a.random() == b.random()             # the next plant is the same either way
+
+
+def test_grow_gives_each_crop_its_leaf_outline():
+    plots = [dict(PLOT, plot_id=1, crop='Sugar Beet'), dict(PLOT, plot_id=2, crop='Summerwheat')]
+    narrow = {'sugar_beet_leaf': np.array([[0.45, 0.55]] * 4)}
+    (_, beet, _), (_, wheat, _) = grow(plots, flat, 1, narrow)
+    (_, plain, _), (_, plain_wheat, _) = grow(plots, flat, 1)
+    assert np.ptp(beet[''][2]) and len(beet[''][2]) > len(plain[''][2])     # 4 bands, not 2
+    assert np.array_equal(wheat['_rows'][0], plain_wheat['_rows'][0])

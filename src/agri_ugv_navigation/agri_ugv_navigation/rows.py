@@ -71,10 +71,12 @@ def row_pattern(xy, spacing, span=math.radians(4.0), coarse=math.radians(0.25),
     spacing, and strength how sharply the points cluster on lines (0: not at all, 1: all
     exactly on lines). The LiDAR, at the origin, sees the side of each plant that faces
     it, so the points lie off their row towards it, across the rows by about 'shift' times
-    the sine of the angle between the ray and the rows. The shift (0 to max_shift) is found
-    by regression: how the points' distance from the rows' mean grows with that sine; it
-    is then undone. The direction is searched in 'coarse' steps on 'sample' of the points,
-    then refined with parabolas through the strengths 'fine' apart, on all of them.
+    the sine of the angle between the ray and the rows. The shift (-max_shift to max_shift)
+    is found by regression: how the points' distance from the rows' mean grows with that
+    sine; it is then undone. It can come out negative (ray casts of the simulated sugar
+    beet: about +7 cm with leaves seen from one side, about -3 cm with leaves seen from
+    both). The direction is searched in 'coarse' steps on 'sample' of the points, then
+    refined with parabolas through the strengths 'fine' apart, on all of them.
     """
     xy = np.asarray(xy, dtype=float)
     reach = np.hypot(xy[:, 0], xy[:, 1])
@@ -97,7 +99,7 @@ def row_pattern(xy, spacing, span=math.radians(4.0), coarse=math.radians(0.25),
             phase = 2 * math.pi * (u + shift * sine) / spacing
             off = np.angle(np.exp(1j * (phase - np.angle(np.exp(1j * phase).mean()))))
             shift -= np.cov(off * spacing / (2 * math.pi), sine)[0, 1] / np.var(sine)
-            shift = min(max(shift, 0.0), max_shift)
+            shift = min(max(shift, -max_shift), max_shift)
         return float(shift)
 
     angles = np.arange(-span, span + coarse / 2, coarse)

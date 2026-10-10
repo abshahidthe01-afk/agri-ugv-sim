@@ -25,9 +25,16 @@ def generate_launch_description():
                  ' scanner_rate:=', LaunchConfiguration('scanner_rate')]), value_type=str)
 
     def spawner(controller):
-        """Ask the controller manager to load and start one controller."""
+        """
+        Ask the controller manager to load and start one controller.
+
+        Starting it takes a step of the simulation; while Gazebo loads the plants and its
+        sensors at startup it stands still for several seconds (the spawner's default of
+        5 s was too short for the steering controller once the plants grew to 2.3 million
+        triangles), so it may take up to 30 s.
+        """
         return Node(package='controller_manager', executable='spawner',
-                    arguments=[controller], output='screen')
+                    arguments=[controller, '--switch-timeout', '30'], output='screen')
 
     return LaunchDescription([
         # Which world to load: a file name from this package's worlds folder, without .sdf

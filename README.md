@@ -38,7 +38,7 @@ cd agri_ugv_ws
 rosdep install --from-paths src --ignore-src -y
 colcon build --symlink-install
 source install/setup.bash
-ros2 run agri_ugv_field make_plants   # grows the crop plants (about 20 s, 90 MB)
+ros2 run agri_ugv_field make_plants   # grows the crop plants (about 35 s, 380 MB)
 colcon build --symlink-install --packages-select agri_ugv_gazebo
 ros2 launch agri_ugv_gazebo sim.launch.py world:=must_c_field
 ```
