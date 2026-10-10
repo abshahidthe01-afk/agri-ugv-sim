@@ -66,6 +66,40 @@ is in the mesh twice, once facing each way (2.34 million plant triangles in the 
 million before; one mesh per plot, so a sensor draws only the plots in its view). Wheat's
 row strips and canopy are still whole pictures.
 
+## 3D point cloud
+
+The raster keeps the highest point per 5 cm cell. The node also keeps every scanner point in
+3D: per plot, in its own frame (x along the rows, y across them, z the height above the plane
+of the wheels), merged per 1 cm voxel (`agri_ugv_phenotyping/cloud.py`, parameter `voxel`),
+about 140 000 points per plot, saved with the map as `plant_map_cloud_<plot_id>.ply` (binary
+PLY, which point cloud viewers open).
+
+```bash
+ros2 run agri_ugv_phenotyping canopy_truth --cloud ~/plant_maps/plant_map_cloud_198.ply
+```
+
+compares a cloud with the plot's true leaves (grown again, without the textures' transparent
+parts, one point per 1 cm voxel): **accuracy**, how far the cloud's plant points lie from the
+nearest leaf; **completeness**, how much of the leaves' top surface (seen from above, where
+the cloud has points) has a point within 2 cm and within 5 cm.
+
+Plot 198 (sugar beet), RTK fixed GNSS:
+
+| Cloud placed with | Points to the true leaves: median / 95 % | Within 1 cm | Top surface within 2 / 5 cm |
+|---|---|---|---|
+| Gazebo's true pose | 0.9 / 3.5 cm | 52 % | 51 / 98 % |
+| the robot's estimate, earlier localization | 1.4 / 4.3 cm | 37 % | 41 / 97 % |
+| the robot's estimate, current localization | 1.0 / 3.6 cm | 48 % | 52 / 98 % |
+
+The first two rows are the same profiles of one survey placed with two poses (the estimate
+was 2.0 cm off along the rows and 0.9 cm across them on average); the third is a later
+survey, after the localization learnt the row measurements' bias per lane and the slides
+while the wheels steer on the spot (1.2 cm mean error in a run of the same plot). Placing
+the profiles with the estimate adds its error to the scan: with the earlier localization
+the median grew from 0.9 to 1.4 cm, with the current one only to 1.0 cm. Within 2 cm only
+about half of the top surface has a point: at 10 profiles per second and 0.5 m/s the
+profiles lie 5 cm apart along the rows (the real scanners take 200 per second).
+
 ## Localization and the map
 
 Float GNSS (the base station's corrections stopped: shared error drifting towards 20 cm),

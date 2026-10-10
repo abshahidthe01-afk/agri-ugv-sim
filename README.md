@@ -26,7 +26,8 @@ rows on real terrain. ROS 2 Humble and Gazebo Fortress.
   and recovery from steering stalls
 - Crop damage metric: wheel travel over the crop rows
 - Plant map from the two laser line scanners: cover and canopy height per plot, compared
-  with the generated plants; crop rows in the map show localization errors
+  with the generated plants; crop rows in the map show localization errors; and a 3D point
+  cloud of every plot, its points a median 1.0 cm from the true leaves
   ([plant map](docs/plant_map.md))
 
 First whole-field run (baseline, all 80 plots, 4.2 km): 643 of 643 segments in 2.85 h
