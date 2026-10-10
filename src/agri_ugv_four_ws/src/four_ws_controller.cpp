@@ -56,6 +56,7 @@ controller_interface::CallbackReturn FourWsController::on_init()
     auto_declare<double>("creep_time", 2.0);
     auto_declare<double>("speed_sigma", 0.02);
     auto_declare<double>("turn_sigma", 0.02);
+    auto_declare<double>("steer_slip", 0.5);
   } catch (const std::exception & e) {
     RCLCPP_ERROR(get_node()->get_logger(), "Could not declare the parameters: %s", e.what());
     return controller_interface::CallbackReturn::ERROR;
@@ -132,6 +133,7 @@ controller_interface::CallbackReturn FourWsController::on_configure(
   creep_speed_ = node->get_parameter("creep_speed").as_double();
   speed_sigma_ = node->get_parameter("speed_sigma").as_double();
   turn_sigma_ = node->get_parameter("turn_sigma").as_double();
+  steer_slip_ = node->get_parameter("steer_slip").as_double();
   try {
     watch_.emplace(
       node->get_parameter("stall_time").as_double(),
@@ -190,6 +192,7 @@ controller_interface::CallbackReturn FourWsController::on_activate(
   for (std::size_t i = 0; i < modules_.size(); ++i) {   // keep the wheels where they point
     steer_angles_.push_back(state_interfaces_[steer_state_[i]].get_value());
   }
+  last_measured_ = steer_angles_;
   velocity_ = {0.0, 0.0, 0.0};
   const Command * last = command_.readFromRT();   // a command from before is not new
   seen_ = last != nullptr ? last->sequence : 0;
@@ -219,11 +222,15 @@ controller_interface::return_type FourWsController::update(
 
   // Odometry first: what the wheels did since the last update
   const auto odometry = forward_kinematics(measured, speeds, modules_, wheel_radius_);
+  double steer_rate = 0.0;
   if (last_time_ && time > *last_time_) {
-    pose_ = integrate_pose(pose_, odometry.velocity, (time - *last_time_).seconds());
+    const double step = (time - *last_time_).seconds();
+    pose_ = integrate_pose(pose_, odometry.velocity, step);
+    steer_rate = steering_rate(last_measured_, measured, step);
   }
   last_time_ = time;
-  publish_odometry(time, odometry);
+  last_measured_ = measured;
+  publish_odometry(time, odometry, steer_rate);
 
   // Watchdog: a command that has not been renewed recently means stop
   const Command * command = command_.readFromRT();
@@ -276,7 +283,8 @@ controller_interface::return_type FourWsController::update(
   return controller_interface::return_type::OK;
 }
 
-void FourWsController::publish_odometry(const rclcpp::Time & time, const Odometry & odometry)
+void FourWsController::publish_odometry(
+  const rclcpp::Time & time, const Odometry & odometry, double steer_rate)
 {
   if (!odometry_->trylock()) {
     return;
@@ -292,14 +300,13 @@ void FourWsController::publish_odometry(const rclcpp::Time & time, const Odometr
   msg.twist.twist.linear.x = odometry.velocity.vx;
   msg.twist.twist.linear.y = odometry.velocity.vy;
   msg.twist.twist.angular.z = odometry.velocity.wz;
-  // speeds: the noise plus the wheels' disagreement (slip, scrubbing)
-  const double speed_variance = speed_sigma_ * speed_sigma_ + odometry.residual *
-    odometry.residual;
-  const double turn = odometry.residual / lever_;
+  // the noise, the wheels' disagreement (slip, scrubbing) and the slide while they steer
+  const auto variances = odometry_variances(
+    odometry.residual, lever_, steer_rate, speed_sigma_, turn_sigma_, steer_slip_);
   std::fill(msg.twist.covariance.begin(), msg.twist.covariance.end(), 0.0);
-  msg.twist.covariance[0] = msg.twist.covariance[7] = speed_variance;
+  msg.twist.covariance[0] = msg.twist.covariance[7] = variances.speed;
   msg.twist.covariance[14] = msg.twist.covariance[21] = msg.twist.covariance[28] = kUnused;
-  msg.twist.covariance[35] = turn_sigma_ * turn_sigma_ + turn * turn;
+  msg.twist.covariance[35] = variances.turn;
   odometry_->unlockAndPublish();
 }
 

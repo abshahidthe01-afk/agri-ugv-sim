@@ -4,7 +4,8 @@ import math
 import random
 
 from agri_ugv_control.kinematics import (forward_kinematics, integrate_pose,
-                                         inverse_kinematics, WheelModule)
+                                         inverse_kinematics, odometry_variances,
+                                         steering_rate, WheelModule)
 import pytest
 
 # Geometry of the robot (docs/robot_spec.md). The tests only need realistic numbers.
@@ -146,3 +147,21 @@ def test_a_wheel_further_past_its_limit_than_the_margin_still_swings_round():
         assert cmd.wheel_speed == pytest.approx(-math.hypot(0.2, 0.5) / WHEEL_RADIUS)
     with pytest.raises(ValueError):
         inverse_kinematics(0.5, 0.0, 0.0, MODULES, WHEEL_RADIUS, margin=-0.1)
+
+
+def test_the_steering_rate_is_the_fastest_joint():
+    assert steering_rate([0.0, 0.1, -0.2, 0.0], [0.01, 0.1, -0.23, 0.0], 0.01) == \
+        pytest.approx(3.0)
+    assert steering_rate([0.0], [1.0], 0.0) == 0.0                 # no time: no speed
+    with pytest.raises(ValueError):
+        steering_rate([0.0], [0.0, 0.0], 0.01)
+
+
+def test_the_odometry_is_less_certain_when_wheels_slip_or_steer_on_the_spot():
+    assert odometry_variances(0.0, 1.0, 0.0, 0.02, 0.02, 0.5) == pytest.approx(
+        (0.02 ** 2, 0.02 ** 2))                                      # rolling, they agree
+    assert odometry_variances(0.03, 1.5, 0.0, 0.02, 0.02, 0.5) == pytest.approx(
+        (0.02 ** 2 + 0.03 ** 2, 2 * 0.02 ** 2))                      # one wheel slips
+    speed, turn = odometry_variances(0.0, 1.0, 1.0, 0.02, 0.02, 0.5)   # re-steering
+    assert math.sqrt(speed) == pytest.approx(math.hypot(0.02, 0.5))
+    assert turn == pytest.approx(0.02 ** 2)

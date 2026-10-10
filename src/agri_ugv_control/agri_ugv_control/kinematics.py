@@ -124,3 +124,26 @@ def integrate_pose(x: float, y: float, yaw: float, vx: float, vy: float, wz: flo
     middle = yaw + wz * dt / 2
     c, s = math.cos(middle), math.sin(middle)
     return x + (c * vx - s * vy) * dt, y + (s * vx + c * vy) * dt, yaw + wz * dt
+
+
+def steering_rate(before: List[float], now: List[float], dt: float) -> float:
+    """Return the speed [rad/s] of the fastest steering joint between two sets of angles."""
+    if len(before) != len(now):
+        raise ValueError('need two sets of angles of the same length')
+    if dt <= 0:
+        return 0.0                         # no time: no speed
+    return max((abs(b - a) / dt for a, b in zip(before, now)), default=0.0)
+
+
+def odometry_variances(residual: float, lever: float, steer_rate: float, speed_sigma: float,
+                       turn_sigma: float, steer_slip: float) -> Tuple[float, float]:
+    """
+    Return how uncertain the odometry is: the variances of the speeds and the turn rate.
+
+    The noise (speed_sigma [m/s], turn_sigma [rad/s]), plus the wheels' disagreement
+    (residual [m/s], and over the wheels' distance from the centre, lever [m], for the turn
+    rate), plus a slide while the wheels turn on the spot: the tyres scrub and push the
+    base, steer_slip [m/s] per rad/s of the fastest steering joint (steer_rate).
+    """
+    return (speed_sigma ** 2 + residual ** 2 + (steer_slip * steer_rate) ** 2,
+            turn_sigma ** 2 + (residual / lever) ** 2)

@@ -40,8 +40,10 @@ namespace agri_ugv_four_ws
 ///              max_angular_z [rad/s], max_accel_x, max_accel_y [m/s^2], max_accel_z
 ///              [rad/s^2]; wait_for_steering, steer_tolerance [rad], ramp_together,
 ///              limit_margin [rad], stall_time [s], creep_speed [m/s], creep_time [s];
-///              speed_sigma [m/s], turn_sigma [rad/s] (odometry noise); all read when the
-///              controller is configured
+///              speed_sigma [m/s], turn_sigma [rad/s] (odometry noise), steer_slip [m/s
+///              per rad/s] (the base slides while the wheels turn on the spot: the
+///              odometry is that much less certain); all read when the controller is
+///              configured
 class FourWsController : public controller_interface::ControllerInterface
 {
 public:
@@ -64,7 +66,7 @@ private:
     unsigned long sequence;  ///< counts the commands received, to tell a new one
   };
 
-  void publish_odometry(const rclcpp::Time & time, const Odometry & odometry);
+  void publish_odometry(const rclcpp::Time & time, const Odometry & odometry, double steer_rate);
 
   std::vector<std::string> steering_joints_;
   std::vector<std::string> wheel_joints_;
@@ -79,6 +81,7 @@ private:
   double creep_speed_ = 0.05;
   double speed_sigma_ = 0.02;
   double turn_sigma_ = 0.02;
+  double steer_slip_ = 0.5;
   std::optional<StallWatch> watch_;
 
   // the command interfaces: steering positions, then wheel velocities (module order)
@@ -96,6 +99,7 @@ private:
 
   Velocity velocity_{0.0, 0.0, 0.0};  ///< the limited velocity being driven
   std::vector<double> steer_angles_;   ///< the last commanded angle per module
+  std::vector<double> last_measured_;  ///< the measured angles of the last update
   Pose2D pose_{0.0, 0.0, 0.0};
   std::optional<rclcpp::Time> last_time_;
 

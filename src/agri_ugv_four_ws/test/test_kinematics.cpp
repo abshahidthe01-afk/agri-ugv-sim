@@ -191,3 +191,25 @@ TEST(IntegratePose, SidewaysMotionFollowsTheHeading)
   EXPECT_NEAR(pose.y, 2.0, 1e-12);
   EXPECT_NEAR(pose.yaw, kPi / 2, 1e-12);
 }
+
+TEST(SteeringRate, IsTheFastestJoint)
+{
+  using agri_ugv_four_ws::steering_rate;
+  EXPECT_NEAR(steering_rate({0.0, 0.1, -0.2, 0.0}, {0.01, 0.1, -0.23, 0.0}, 0.01), 3.0, 1e-9);
+  EXPECT_EQ(steering_rate({0.0}, {1.0}, 0.0), 0.0);   // no time: no speed
+  EXPECT_THROW(steering_rate({0.0}, {0.0, 0.0}, 0.01), std::invalid_argument);
+}
+
+TEST(OdometryVariances, AddTheNoiseTheDisagreementAndTheSlideWhileSteering)
+{
+  using agri_ugv_four_ws::odometry_variances;
+  auto v = odometry_variances(0.0, 1.0, 0.0, 0.02, 0.02, 0.5);   // rolling, wheels agree
+  EXPECT_NEAR(v.speed, 0.02 * 0.02, 1e-15);
+  EXPECT_NEAR(v.turn, 0.02 * 0.02, 1e-15);
+  v = odometry_variances(0.03, 1.5, 0.0, 0.02, 0.02, 0.5);       // one wheel slips
+  EXPECT_NEAR(v.speed, 0.02 * 0.02 + 0.03 * 0.03, 1e-15);
+  EXPECT_NEAR(v.turn, 0.02 * 0.02 + 0.02 * 0.02, 1e-15);
+  v = odometry_variances(0.0, 1.0, 1.0, 0.02, 0.02, 0.5);        // re-steering on the spot
+  EXPECT_NEAR(std::sqrt(v.speed), std::hypot(0.02, 0.5), 1e-12);
+  EXPECT_NEAR(v.turn, 0.02 * 0.02, 1e-15);
+}

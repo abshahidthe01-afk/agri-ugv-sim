@@ -1,5 +1,6 @@
 #include "agri_ugv_four_ws/kinematics.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <stdexcept>
@@ -118,6 +119,32 @@ Pose2D integrate_pose(const Pose2D & pose, const Velocity & velocity, double dt)
   const double c = std::cos(middle), s = std::sin(middle);
   return {pose.x + (c * velocity.vx - s * velocity.vy) * dt,
     pose.y + (s * velocity.vx + c * velocity.vy) * dt, pose.yaw + velocity.wz * dt};
+}
+
+double steering_rate(
+  const std::vector<double> & before, const std::vector<double> & now, double dt)
+{
+  if (before.size() != now.size()) {
+    throw std::invalid_argument("steering_rate: need two sets of the same length");
+  }
+  if (dt <= 0.0) {
+    return 0.0;
+  }
+  double fastest = 0.0;
+  for (std::size_t i = 0; i < now.size(); ++i) {
+    fastest = std::max(fastest, std::abs(now[i] - before[i]) / dt);
+  }
+  return fastest;
+}
+
+OdometryVariances odometry_variances(
+  double residual, double lever, double steer_rate, double speed_sigma, double turn_sigma,
+  double steer_slip)
+{
+  const double slide = steer_slip * steer_rate;
+  const double turn = residual / lever;
+  return {speed_sigma * speed_sigma + residual * residual + slide * slide,
+    turn_sigma * turn_sigma + turn * turn};
 }
 
 }  // namespace agri_ugv_four_ws

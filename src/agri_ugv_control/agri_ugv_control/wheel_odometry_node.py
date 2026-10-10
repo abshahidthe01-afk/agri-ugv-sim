@@ -6,12 +6,17 @@ Subscribes:  /robot_description (std_msgs/String, latched)  geometry source
 Publishes:   /wheel/odom        (nav_msgs/Odometry)         pose in odom, body velocity
 
 The pose starts at zero and is dead-reckoned (it drifts); a fusion filter should use the
-velocity, whose covariance grows when the wheels disagree (slip, scrubbing).
+velocity, whose covariance grows when the wheels disagree (slip, scrubbing) and while they
+turn on the spot (the base slides).
+
+Parameters:  speed_sigma [m/s], turn_sigma [rad/s] (noise), steer_slip [m/s per rad/s of
+             the fastest steering joint] (see kinematics.odometry_variances)
 """
 
 import math
 
-from agri_ugv_control.kinematics import forward_kinematics, integrate_pose
+from agri_ugv_control.kinematics import (forward_kinematics, integrate_pose,
+                                         odometry_variances, steering_rate)
 from agri_ugv_control.robot_geometry import geometry_from_urdf
 from nav_msgs.msg import Odometry
 import rclpy
@@ -31,7 +36,8 @@ class WheelOdometryNode(Node):
         super().__init__('wheel_odometry')
         self.speed_sigma = self.declare_parameter('speed_sigma', 0.02).value   # [m/s]
         self.turn_sigma = self.declare_parameter('turn_sigma', 0.02).value     # [rad/s]
-        self.modules, self.radius = None, None
+        self.steer_slip = self.declare_parameter('steer_slip', 0.5).value      # [m/s / rad/s]
+        self.modules, self.radius, self.last_angles = None, None, None
         self.pose, self.last_time = (0.0, 0.0, 0.0), None
         self.publisher = self.create_publisher(Odometry, '/wheel/odom', 10)
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -56,9 +62,11 @@ class WheelOdometryNode(Node):
             return                     # not a complete message of all wheel modules
         vx, vy, wz, residual = forward_kinematics(angles, speeds, self.modules, self.radius)
         time = msg.header.stamp.sec + 1e-9 * msg.header.stamp.nanosec
+        steer_rate = 0.0
         if self.last_time is not None and time > self.last_time:
             self.pose = integrate_pose(*self.pose, vx, vy, wz, time - self.last_time)
-        self.last_time = time
+            steer_rate = steering_rate(self.last_angles, angles, time - self.last_time)
+        self.last_time, self.last_angles = time, angles
 
         odom = Odometry()
         odom.header.stamp = msg.header.stamp
@@ -69,11 +77,13 @@ class WheelOdometryNode(Node):
         odom.pose.pose.orientation.w = math.cos(yaw / 2)
         odom.twist.twist.linear.x, odom.twist.twist.linear.y = vx, vy
         odom.twist.twist.angular.z = wz
-        speed_variance = self.speed_sigma ** 2 + residual ** 2
+        speed_variance, turn_variance = odometry_variances(
+            residual, self.lever, steer_rate, self.speed_sigma, self.turn_sigma,
+            self.steer_slip)
         covariance = [0.0] * 36
         covariance[0] = covariance[7] = speed_variance
         covariance[14] = covariance[21] = covariance[28] = UNUSED
-        covariance[35] = self.turn_sigma ** 2 + (residual / self.lever) ** 2
+        covariance[35] = turn_variance
         odom.twist.covariance = covariance
         self.publisher.publish(odom)
 
