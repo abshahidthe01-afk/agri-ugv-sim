@@ -7,6 +7,8 @@ plots: plot_IDs separated by commas, e.g. 178,177,198,197 (default: the whole fi
 lidar: true (default) or false, with or without the 3D LiDAR on the roof.
 scanners: true (default) or false, the laser line scanners measuring or not;
 scanner_rate: their profiles per second (default 10).
+cameras: none (default), top (the 4 dome cameras of the top ring) or all 20 take pictures;
+camera_rate: their pictures per second (default 2).
 controller: cpp (default) or python, the four-wheel-steering driver (see sim.launch.py).
 The robot is placed where the mission begins, facing along the crop rows; the mission
 node then waits for /mission/start (std_srvs/Trigger). The rows node measures the robot's
@@ -54,6 +56,8 @@ def mission(context):
                               'lidar': LaunchConfiguration('lidar'),
                               'scanners': LaunchConfiguration('scanners'),
                               'scanner_rate': LaunchConfiguration('scanner_rate'),
+                              'cameras': LaunchConfiguration('cameras'),
+                              'camera_rate': LaunchConfiguration('camera_rate'),
                               'controller': LaunchConfiguration('controller'),
                               'x': f'{x:.3f}', 'y': f'{y:.3f}', 'z': f'{z:.3f}',
                               'yaw': f'{yaw:.5f}'}.items()),
@@ -76,6 +80,10 @@ def generate_launch_description():
                               description='true: the laser line scanners measure, false: not'),
         DeclareLaunchArgument('scanner_rate', default_value='10',
                               description='Profiles per second of each line scanner'),
+        DeclareLaunchArgument('cameras', default_value='none',
+                              description='Dome cameras that take pictures: none, top or all'),
+        DeclareLaunchArgument('camera_rate', default_value='2',
+                              description='Pictures per second of each camera'),
         DeclareLaunchArgument('controller', default_value='cpp',
                               description='Four-wheel-steering driver: cpp or python'),
         OpaqueFunction(function=mission),

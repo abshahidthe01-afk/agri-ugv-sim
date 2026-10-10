@@ -23,7 +23,9 @@ def generate_launch_description():
                  ' soil:=', LaunchConfiguration('soil'),
                  ' lidar:=', LaunchConfiguration('lidar'),
                  ' scanners:=', LaunchConfiguration('scanners'),
-                 ' scanner_rate:=', LaunchConfiguration('scanner_rate')]), value_type=str)
+                 ' scanner_rate:=', LaunchConfiguration('scanner_rate'),
+                 ' cameras:=', LaunchConfiguration('cameras'),
+                 ' camera_rate:=', LaunchConfiguration('camera_rate')]), value_type=str)
 
     def spawner(controller, condition=None):
         """
@@ -59,6 +61,12 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'scanner_rate', default_value='10',
             description='Profiles per second of each line scanner'),
+        DeclareLaunchArgument(
+            'cameras', default_value='none', choices=['none', 'top', 'all'],
+            description='Dome cameras that take pictures: none, top (the 4 of the top ring) '
+                        'or all 20 (each costs rendering time)'),
+        DeclareLaunchArgument(
+            'camera_rate', default_value='2', description='Pictures per second of each camera'),
         DeclareLaunchArgument(
             'controller', default_value='cpp', choices=['cpp', 'python'],
             description='Four-wheel-steering driver: cpp (agri_ugv_four_ws controller in the '
@@ -97,6 +105,7 @@ def generate_launch_description():
         # - the IMU, and the GNSS antennas' ideal fixes (errors are added below)
         # - the LiDAR's point cloud (when it is on the robot)
         # - the line scanners' profiles (when they measure)
+        # - the dome cameras' pictures and calibration (when they take pictures)
         Node(package='ros_gz_bridge', executable='parameter_bridge',
              arguments=['/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock',
                         '/ground_truth/odom@nav_msgs/msg/Odometry[ignition.msgs.Odometry',
@@ -106,7 +115,11 @@ def generate_launch_description():
                         '/lidar/points@sensor_msgs/msg/PointCloud2'
                         '[ignition.msgs.PointCloudPacked',
                         '/scanners/left@sensor_msgs/msg/LaserScan[ignition.msgs.LaserScan',
-                        '/scanners/right@sensor_msgs/msg/LaserScan[ignition.msgs.LaserScan']),
+                        '/scanners/right@sensor_msgs/msg/LaserScan[ignition.msgs.LaserScan',
+                        *[f'/cameras/dome_{i}/image@sensor_msgs/msg/Image[ignition.msgs.Image'
+                          for i in range(20)],
+                        *[f'/cameras/dome_{i}/camera_info@sensor_msgs/msg/CameraInfo'
+                          '[ignition.msgs.CameraInfo' for i in range(20)]]),
 
         # Controllers: they wait until the robot (and its controller manager) exists
         spawner('joint_state_broadcaster'),

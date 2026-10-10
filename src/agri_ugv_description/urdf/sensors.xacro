@@ -206,7 +206,59 @@
     </gazebo>
   </xacro:macro>
 
-  <!-- Gazebo's Sensors system renders the camera-like sensors (LiDAR, line scanners) with Ogre 2 -->
+  <!-- Dome camera (sensor): one of the 20 cameras of the dome (payload.xacro), looking along
+       +x of dome_camera_<index>_link at the plant under the robot. The real ones are Nikon Z7
+       (45 megapixels, Esser et al. 2023); here a small image, a few per second, assumed lens:
+       every image renders the plants. The image is taken just in front of the lens, from
+       dome_camera_<index>_optical_link (x forward, as the camera link), and published on
+       /cameras/dome_<index>/image, its calibration on /cameras/dome_<index>/camera_info. -->
+  <xacro:macro name="dome_camera_sensor" params="index rate width height fov">
+    <link name="dome_camera_${index}_optical_link"/>
+    <joint name="dome_camera_${index}_optical_joint" type="fixed">
+      <parent link="dome_camera_${index}_link"/>
+      <child link="dome_camera_${index}_optical_link"/>
+      <origin xyz="0.095 0 0" rpy="0 0 0"/>
+    </joint>
+    <gazebo reference="dome_camera_${index}_optical_link">
+      <sensor name="dome_camera_${index}" type="camera">
+        <always_on>true</always_on>
+        <update_rate>${rate}</update_rate>
+        <topic>/cameras/dome_${index}/image</topic>
+        <ignition_frame_id>dome_camera_${index}_optical_link</ignition_frame_id>
+        <visualize>false</visualize>
+        <camera>
+          <horizontal_fov>${fov}</horizontal_fov>
+          <image>
+            <width>${width}</width>
+            <height>${height}</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>0.05</near>
+            <far>10.0</far>
+          </clip>
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>0.007</stddev>
+          </noise>
+        </camera>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+
+  <!-- the dome cameras first..last (indices) as sensors -->
+  <xacro:macro name="dome_camera_sensors" params="first last rate width height fov">
+    <xacro:dome_camera_sensor index="${first}" rate="${rate}" width="${width}"
+                              height="${height}" fov="${fov}"/>
+    <xacro:if value="${first &lt; last}">
+      <xacro:dome_camera_sensors first="${first + 1}" last="${last}" rate="${rate}"
+                                 width="${width}" height="${height}" fov="${fov}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <!-- Gazebo's Sensors system renders the camera-like sensors (LiDAR, line scanners, cameras)
+       with Ogre 2 -->
   <xacro:macro name="rendering_system">
     <gazebo>
       <plugin filename="ignition-gazebo-sensors-system" name="ignition::gazebo::systems::Sensors">

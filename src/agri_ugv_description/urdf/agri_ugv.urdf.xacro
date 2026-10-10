@@ -17,6 +17,11 @@
   <xacro:arg name="scanners" default="true"/>
   <!-- their profiles per second; each one costs rendering time (the real ones: 200) -->
   <xacro:arg name="scanner_rate" default="10"/>
+  <!-- The dome cameras as sensors (sensors.xacro): none (visual only), top (the 4 of the top
+       ring, looking down at the plant) or all 20; each image costs rendering time -->
+  <xacro:arg name="cameras" default="none"/>
+  <!-- their images per second -->
+  <xacro:arg name="camera_rate" default="2"/>
   <!-- ============ Dimensions (sources: docs/robot_spec.md) ============ -->
   <xacro:property name="track"           value="1.50"/>   <!-- left-right wheel spacing -->
   <xacro:property name="wheelbase"       value="1.35"/>   <!-- front-rear steering axes -->
@@ -270,7 +275,17 @@
     <xacro:line_scanner_sensor side="right" rate="$(arg scanner_rate)" samples="300"
                                fan="${radians(35)}"/>
   </xacro:if>
-  <xacro:if value="${'$(arg lidar)' in ('true', '1') or '$(arg scanners)' in ('true', '1')}">
+  <!-- the cameras: 640 x 480 pixels, 60 deg wide (assumed lens) -->
+  <xacro:if value="${'$(arg cameras)' == 'top'}">
+    <xacro:dome_camera_sensors first="16" last="19" rate="$(arg camera_rate)" width="640"
+                               height="480" fov="${radians(60)}"/>
+  </xacro:if>
+  <xacro:if value="${'$(arg cameras)' == 'all'}">
+    <xacro:dome_camera_sensors first="0" last="19" rate="$(arg camera_rate)" width="640"
+                               height="480" fov="${radians(60)}"/>
+  </xacro:if>
+  <xacro:if value="${'$(arg lidar)' in ('true', '1') or '$(arg scanners)' in ('true', '1')
+                     or '$(arg cameras)' != 'none'}">
     <xacro:rendering_system/>
   </xacro:if>
     <!-- ============ ros2_control (only when a controllers file is given) ============ -->

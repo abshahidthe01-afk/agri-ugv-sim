@@ -174,3 +174,47 @@ def test_the_scanner_rate_is_a_model_argument():
     rates = {s.get('name'): float(s.findtext('update_rate')) for s in root.iter('sensor')
              if s.get('name', '').startswith('line_scanner_')}
     assert rates == {'line_scanner_left': 25.0, 'line_scanner_right': 25.0}
+
+
+def cameras(root):
+    """Return the dome camera sensors of a model, by name."""
+    return {s.get('name'): s for s in root.iter('sensor') if s.get('type') == 'camera'}
+
+
+def test_the_dome_cameras_take_pictures_only_when_asked():
+    assert cameras(model(controllers_file='x')) == {}                 # default: visual only
+    top = cameras(model(controllers_file='x', cameras='top'))
+    assert sorted(top) == [f'dome_camera_{i}' for i in range(16, 20)]
+    for i in range(16, 20):
+        sensor = top[f'dome_camera_{i}']
+        assert sensor.findtext('topic') == f'/cameras/dome_{i}/image'
+        assert sensor.findtext('ignition_frame_id') == f'dome_camera_{i}_optical_link'
+        assert float(sensor.findtext('update_rate')) == 2.0
+        assert (int(sensor.findtext('camera/image/width')),
+                int(sensor.findtext('camera/image/height'))) == (640, 480)
+        assert math.degrees(float(sensor.findtext('camera/horizontal_fov'))) == \
+            pytest.approx(60.0)
+    assert len(cameras(model(controllers_file='x', cameras='all'))) == 20
+    fast = cameras(model(controllers_file='x', cameras='top', camera_rate='5'))
+    assert {float(s.findtext('update_rate')) for s in fast.values()} == {5.0}
+    alone = model(controllers_file='x', cameras='top', lidar='false', scanners='false')
+    assert [p.get('filename') for p in alone.iter('plugin')].count(
+        'ignition-gazebo-sensors-system') == 1                  # the cameras need it too
+
+
+@pytest.mark.parametrize('index', range(16, 20))
+def test_a_top_camera_looks_from_in_front_of_its_lens_at_the_plant(index):
+    root = model(controllers_file='x', cameras='top')
+    joints = {j.get('name'): j for j in root.findall('joint')}
+    position, turn = np.zeros(3), np.eye(3)
+    for name in (f'dome_camera_{index}_joint', f'dome_camera_{index}_optical_joint'):
+        origin = joints[name].find('origin')
+        position = position + turn @ np.array([float(v) for v in origin.get('xyz').split()])
+        turn = turn @ rotation([float(v) for v in origin.get('rpy').split()])
+    position[2] += 0.205                                       # above the ground
+    to_plant = np.array([0.0, 0.0, 0.30]) - position             # the dome's aim point
+    assert turn[:, 0] @ to_plant / np.linalg.norm(to_plant) == pytest.approx(1.0)
+    assert 1.2 < np.linalg.norm(to_plant) < 1.6
+    lens_tip = 0.09                                              # the lens: x from 0 to 0.09
+    optical = joints[f'dome_camera_{index}_optical_joint'].find('origin').get('xyz').split()
+    assert float(optical[0]) > lens_tip
