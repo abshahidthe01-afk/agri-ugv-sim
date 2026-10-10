@@ -1,9 +1,10 @@
 import json
 
 from agri_ugv_field.layout import field_layout, layout_csv
+from agri_ugv_phenotyping.cloud import write_ply
 from agri_ugv_phenotyping.plant_map import FieldMap
 from agri_ugv_phenotyping.truth import canopy_top, leaf_points, main, map_traits, traits, \
-    true_canopy
+    true_canopy, true_leaves
 import numpy as np
 import pytest
 
@@ -96,3 +97,15 @@ def test_the_true_canopy_grows_the_same_plants_again_and_main_prints_it(tmp_path
     out = capsys.readouterr().out
     assert 'map minus truth: cover' in out and json.loads(str(np.load(
         tmp_path / 'map.npz')['plots']))[0]['plot_id'] == 100
+    # the true leaves in the plot's frame, and a cloud that is exactly them
+    leaves = true_leaves(plots, flat, {100})[100]
+    assert 0.25 < leaves[:, 2].max() <= 0.30 * 1.2 + 1e-6      # heights above the ground
+    assert np.abs(leaves[:, 1]).max() < 3.0 + 0.3               # across the 6 m wide plot
+    part = leaves[np.abs(leaves[:, 0]) < 1.0]                    # 2 m of the plot's length
+    write_ply(tmp_path / 'cloud.ply', part, comments=['plot 100 (Sugar Beet), voxel 0.01 m'])
+    main(['--layout', str(tmp_path / 'plots.csv'), '--terrain-model', str(tmp_path / 'ground'),
+          '--cloud', str(tmp_path / 'cloud.ply')])
+    out = capsys.readouterr().out.splitlines()
+    assert out[0].startswith('plot 100 (Sugar Beet), 3D cloud:')
+    assert out[1].startswith('  accuracy: to the true leaves median 0.0 cm')
+    assert '100 % has a point within 2 cm' in out[2]

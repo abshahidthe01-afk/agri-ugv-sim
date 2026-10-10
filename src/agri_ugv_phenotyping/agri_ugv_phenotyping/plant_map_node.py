@@ -15,8 +15,10 @@ Publishes:   /plant_map/cloud (sensor_msgs/PointCloud2, frame 'map')   the cells
 Services:    /plant_map/save (std_srvs/Trigger)   save the map now
 Parameters:  layout_file (default: the MuST-C plot layout of agri_ugv_field), cell [m]
              (0.05), low [m] (0.06), pose_topic, publish_period [s] (5.0), quiet [s] (30.0),
-             output (default ~/plant_maps/plant_map): the map is saved as output.npz
-             (rasters) and output.json (traits per plot)
+             voxel [m] (0.01; 0: none): every plot's 3D point cloud, merged per voxel
+             (agri_ugv_phenotyping.cloud), output (default ~/plant_maps/plant_map): the map
+             is saved as output.npz (rasters), output.json (traits per plot) and
+             output_cloud_<plot_id>.ply (the clouds)
 """
 
 import array
@@ -90,11 +92,11 @@ class PlantMapNode(Node):
             plots = [p for p in read_layout_csv(text.read()) if p['type'] == 'plot']
         value = {name: self.declare_parameter(name, default).value for name, default in [
             ('cell', 0.05), ('low', 0.06), ('pose_topic', '/localization/odometry'),
-            ('publish_period', 5.0), ('quiet', 30.0),
+            ('publish_period', 5.0), ('quiet', 30.0), ('voxel', 0.01),
             ('output', os.path.join(os.path.expanduser('~'), 'plant_maps', 'plant_map'))]}
         self.quiet = value['quiet']
         self.period, self.output = value['publish_period'], value['output']
-        self.map = FieldMap(plots, value['cell'], value['low'])
+        self.map = FieldMap(plots, value['cell'], value['low'], voxel=value['voxel'])
         self.history = deque(maxlen=400)               # (t, x, y, yaw) of the pose
         self.mounts, self.reported = {}, {}
         self.last = {'publish': None, 'check': None}
@@ -173,8 +175,9 @@ class PlantMapNode(Node):
             return False, 'nothing mapped yet'
         os.makedirs(os.path.dirname(self.output) or '.', exist_ok=True)
         count = self.map.save(self.output)
-        text = (f'{count} plot{"s" * (count != 1)} saved to {self.output}.npz and .json '
-                f'({self.profiles} profiles, {self.unplaced} without a pose)')
+        text = (f'{count} plot{"s" * (count != 1)} saved to {self.output}.npz and .json'
+                + (', 3D clouds to _cloud_<plot>.ply' if self.map.clouds else '')
+                + f' ({self.profiles} profiles, {self.unplaced} without a pose)')
         self.get_logger().info('Plant map: ' + text)
         return True, text
 

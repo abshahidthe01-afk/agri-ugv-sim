@@ -11,7 +11,9 @@ canopy height (95th percentile and median of those cells' heights).
 Run from the workspace folder (the defaults are those of make_plants):
     ros2 run agri_ugv_phenotyping canopy_truth --plots 198,197
     ros2 run agri_ugv_phenotyping canopy_truth --map ~/plant_maps/plant_map.npz
-With --map it compares a saved plant map with the truth, on the cells the map has seen.
+    ros2 run agri_ugv_phenotyping canopy_truth --cloud ~/plant_maps/plant_map_cloud_198.ply
+With --map it compares a saved plant map with the truth, on the cells the map has seen; with
+--cloud a plot's saved 3D point cloud (cloud.PlotCloud) with the true leaves (cloud.compare).
 """
 
 import argparse
@@ -22,6 +24,7 @@ from pathlib import Path
 from agri_ugv_field.ground import ground_height, read_obj_grid
 from agri_ugv_field.layout import read_layout_csv
 from agri_ugv_field.plants import CROPS, grow, PARTS, plot_frame
+from agri_ugv_phenotyping.cloud import compare, read_ply, to_plot_frame, voxel_means
 import numpy as np
 
 
@@ -80,23 +83,45 @@ def traits(top, low=0.06, cells=None):
             'height_median': float(np.median(heights)) if len(heights) else None}
 
 
-def true_canopy(plots, ground, ids, seed=1, cell=0.05, step=0.01):
-    """Return {plot_id: highest leaf per cell above the ground} for the plots 'ids'."""
+def grown_leaves(plots, ground, ids, seed=1, step=0.01):
+    """Yield (plot, its leaf points N x 3 in the world) for the plots 'ids', in field order."""
     from agri_ugv_field.textures import draw_texture, leaf_outlines, opaque   # Pillow
 
-    alpha = {}
-    tops = {}
+    alpha, left = {}, set(ids)
     for plot, meshes, _ in grow(plots, ground, seed, leaf_outlines(seed)):
-        if plot['plot_id'] not in ids:
+        if not left:
+            return                       # the generator grows the plots one after another
+        if plot['plot_id'] not in left:
             continue
+        left.discard(plot['plot_id'])
         points = []
         for part, (vertices, uvs, faces) in meshes.items():
             texture = PARTS[CROPS[plot['crop']]['shape']][part]
             if texture not in alpha:
                 alpha[texture] = opaque(draw_texture(texture, seed))
             points.append(leaf_points(vertices, uvs, faces, alpha[texture], step))
-        tops[plot['plot_id']] = canopy_top(plot, np.vstack(points), ground, cell)
-    return tops
+        yield plot, np.vstack(points)
+
+
+def true_canopy(plots, ground, ids, seed=1, cell=0.05, step=0.01):
+    """Return {plot_id: highest leaf per cell above the ground} for the plots 'ids'."""
+    return {plot['plot_id']: canopy_top(plot, points, ground, cell)
+            for plot, points in grown_leaves(plots, ground, ids, seed, step)}
+
+
+def true_leaves(plots, ground, ids, seed=1, step=0.007, voxel=0.01):
+    """
+    Return {plot_id: leaf points (N x 3) in the plot's frame} for the plots 'ids'.
+
+    As a PlotCloud holds them: x along the rows, y across, z the height above the ground;
+    one point per 'voxel' (the mean of the leaf points in it).
+    """
+    leaves = {}
+    for plot, points in grown_leaves(plots, ground, ids, seed, step):
+        local = to_plot_frame(plot, points[:, :2],
+                              points[:, 2] - ground(points[:, 0], points[:, 1]))
+        leaves[plot['plot_id']] = voxel_means(local, voxel)
+    return leaves
 
 
 def map_traits(saved, plot_id):
@@ -108,6 +133,23 @@ def map_traits(saved, plot_id):
                   'height': float(np.percentile(heights, 95)) if len(heights) else None,
                   'height_median': float(np.median(heights)) if len(heights) else None,
                   'seen': float(seen.mean())}
+
+
+def cloud_text(plot, result):
+    """Return the comparison of a plot's cloud with its true leaves as text."""
+    lines = [f'plot {plot["plot_id"]} ({plot["crop"]}), 3D cloud: {result["plant_points"]} '
+             'plant points']
+    if result['accuracy_median'] is not None:
+        far = result['accuracy_95']
+        lines.append('  accuracy: to the true leaves median '
+                     f'{100 * result["accuracy_median"]:.1f} cm, 95 % '
+                     + (f'{100 * far:.1f} cm' if np.isfinite(far) else 'more than 5 cm')
+                     + f'; {100 * result["within_1cm"]:.0f} % within 1 cm')
+    if result['complete_2cm'] is not None:
+        lines.append(f'  completeness: of the true top surface (where the cloud has points) '
+                     f'{100 * result["complete_2cm"]:.0f} % has a point within 2 cm, '
+                     f'{100 * result["complete_5cm"]:.0f} % within 5 cm')
+    return '\n'.join(lines)
 
 
 def text(t):
@@ -128,6 +170,7 @@ def main(argv=None):
     parser.add_argument('--seed', type=int, default=1, help='make_plants seed (default 1)')
     parser.add_argument('--plots', default='', help='plot_IDs separated by commas')
     parser.add_argument('--map', help='a saved plant map (.npz) to compare with the truth')
+    parser.add_argument('--cloud', help='a saved 3D cloud of one plot (.ply) to compare')
     parser.add_argument('--cell', type=float, default=0.05, help='cell size [m] (default 0.05)')
     parser.add_argument('--low', type=float, default=0.06, help='plant height [m] (default 0.06)')
     args = parser.parse_args(argv)
@@ -138,6 +181,13 @@ def main(argv=None):
     def ground(x, y):
         return ground_height(grid, x, y)
 
+    if args.cloud:
+        points, _, comments = read_ply(Path(args.cloud).expanduser())
+        plot_id = int(comments[0].split()[1])          # 'plot <plot_id> (<crop>), ...'
+        [plot] = [p for p in plots if p['plot_id'] == plot_id]
+        leaves = true_leaves(plots, ground, {plot_id}, args.seed)[plot_id]
+        print(cloud_text(plot, compare(points, leaves, args.low)))
+        return
     saved = np.load(Path(args.map).expanduser()) if args.map else None
     if saved is not None:
         ids = [p['plot_id'] for p in json.loads(str(saved['plots']))]

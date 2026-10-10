@@ -23,6 +23,7 @@ import json
 import math
 
 from agri_ugv_field.plants import CROPS, plot_frame, row_offsets
+from agri_ugv_phenotyping.cloud import PlotCloud
 import numpy as np
 
 PANEL_Y = 0.72          # [m] points at least this far to the side ...
@@ -141,9 +142,14 @@ class PlotMap:
 class FieldMap:
     """Plant maps of all plots, filled with scanner profiles placed by the robot's pose."""
 
-    def __init__(self, plots, cell=0.05, low=0.06, reach=1.5):
-        """Prepare a map per plot; profiles reach at most 'reach' metres from the robot."""
+    def __init__(self, plots, cell=0.05, low=0.06, reach=1.5, voxel=None):
+        """
+        Prepare a map per plot; profiles reach at most 'reach' metres from the robot.
+
+        With 'voxel' [m], every plot also gets a 3D point cloud (cloud.PlotCloud).
+        """
         self.maps = {p['plot_id']: PlotMap(p, cell, low) for p in plots}
+        self.clouds = {} if not voxel else {p['plot_id']: PlotCloud(p, voxel) for p in plots}
         self.cell, self.low = cell, low
         self.ids = np.array(list(self.maps))
         self.centres = np.array([[p['centre_x'], p['centre_y']] for p in plots]).reshape(-1, 2)
@@ -163,6 +169,8 @@ class FieldMap:
             if n:
                 self.changed[int(plot_id)] = t
                 placed += n
+                if self.clouds:
+                    self.clouds[plot_id].add(xy, points[:, 2])
         return placed
 
     def traits(self):
@@ -175,10 +183,13 @@ class FieldMap:
 
         The npz holds 'cell', 'low', 'plots' (the plots' layout rows as JSON text) and per
         plot 'top_<plot_id>' (highest point per cell [m], NaN where nothing was seen),
-        'count_<plot_id>', 'plant_count_<plot_id>' and 'across_sum_<plot_id>'. Returns the
-        number of plots saved.
+        'count_<plot_id>', 'plant_count_<plot_id>' and 'across_sum_<plot_id>'. With clouds,
+        each plot's is saved as path_cloud_<plot_id>.ply. Returns the number of plots saved.
         """
         maps = {plot_id: m for plot_id, m in self.maps.items() if m.count.any()}
+        for plot_id in maps:
+            if plot_id in self.clouds:
+                self.clouds[plot_id].save(f'{path}_cloud_{plot_id}.ply')
         arrays = {}
         for plot_id, m in maps.items():
             for name in ('top', 'count', 'plant_count', 'across_sum'):
