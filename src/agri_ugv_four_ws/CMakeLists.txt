@@ -9,6 +9,19 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
+set(CONTROLLER_DEPENDS
+  controller_interface
+  geometry_msgs
+  hardware_interface
+  nav_msgs
+  pluginlib
+  rclcpp
+  rclcpp_lifecycle
+  realtime_tools
+)
+foreach(dependency IN ITEMS ${CONTROLLER_DEPENDS})
+  find_package(${dependency} REQUIRED)
+endforeach()
 
 # The four-wheel-steering core: kinematics, speed limits, steer first; plain C++, no ROS
 add_library(four_ws_core SHARED
@@ -21,8 +34,15 @@ target_include_directories(four_ws_core PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 
+# The ros2_control controller around the core, run by the controller manager
+add_library(four_ws_controller SHARED src/four_ws_controller.cpp)
+target_link_libraries(four_ws_controller four_ws_core)
+# SYSTEM: warnings in the ROS headers are not ours (and -Werror would stop the build)
+ament_target_dependencies(four_ws_controller SYSTEM ${CONTROLLER_DEPENDS})
+pluginlib_export_plugin_description_file(controller_interface four_ws_controller.xml)
+
 install(DIRECTORY include/ DESTINATION include)
-install(TARGETS four_ws_core
+install(TARGETS four_ws_core four_ws_controller
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -41,4 +61,5 @@ endif()
 
 ament_export_include_directories(include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
+ament_export_dependencies(${CONTROLLER_DEPENDS})
 ament_package()

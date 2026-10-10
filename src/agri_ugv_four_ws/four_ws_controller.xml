@@ -1,0 +1,9 @@
+<library path="four_ws_controller">
+  <class name="agri_ugv_four_ws/FourWsController" type="agri_ugv_four_ws::FourWsController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>
+      Four-wheel-steering controller: /cmd_vel in, steering angles and wheel speeds out
+      (steer first, speed limits, stall creep), and the wheel odometry on /wheel/odom.
+    </description>
+  </class>
+</library>

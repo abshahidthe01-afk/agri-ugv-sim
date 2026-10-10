@@ -7,6 +7,7 @@ plots: plot_IDs separated by commas, e.g. 178,177,198,197 (default: the whole fi
 lidar: true (default) or false, with or without the 3D LiDAR on the roof.
 scanners: true (default) or false, the laser line scanners measuring or not;
 scanner_rate: their profiles per second (default 10).
+controller: python (default) or cpp, the four-wheel-steering driver (see sim.launch.py).
 The robot is placed where the mission begins, facing along the crop rows; the mission
 node then waits for /mission/start (std_srvs/Trigger). The rows node measures the robot's
 place across the crop rows in the LiDAR scans (/rows/measurement).
@@ -53,6 +54,7 @@ def mission(context):
                               'lidar': LaunchConfiguration('lidar'),
                               'scanners': LaunchConfiguration('scanners'),
                               'scanner_rate': LaunchConfiguration('scanner_rate'),
+                              'controller': LaunchConfiguration('controller'),
                               'x': f'{x:.3f}', 'y': f'{y:.3f}', 'z': f'{z:.3f}',
                               'yaw': f'{yaw:.5f}'}.items()),
         Node(package='agri_ugv_navigation', executable='mission', output='screen',
@@ -74,5 +76,7 @@ def generate_launch_description():
                               description='true: the laser line scanners measure, false: not'),
         DeclareLaunchArgument('scanner_rate', default_value='10',
                               description='Profiles per second of each line scanner'),
+        DeclareLaunchArgument('controller', default_value='python',
+                              description='Four-wheel-steering driver: python or cpp'),
         OpaqueFunction(function=mission),
     ])

@@ -3,6 +3,7 @@
 from launch import LaunchDescription
 from launch.actions import (AppendEnvironmentVariable, DeclareLaunchArgument,
                             IncludeLaunchDescription)
+from launch.conditions import LaunchConfigurationEquals
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -24,7 +25,7 @@ def generate_launch_description():
                  ' scanners:=', LaunchConfiguration('scanners'),
                  ' scanner_rate:=', LaunchConfiguration('scanner_rate')]), value_type=str)
 
-    def spawner(controller):
+    def spawner(controller, condition=None):
         """
         Ask the controller manager to load and start one controller.
 
@@ -34,7 +35,12 @@ def generate_launch_description():
         triangles), so it may take up to 30 s.
         """
         return Node(package='controller_manager', executable='spawner',
-                    arguments=[controller, '--switch-timeout', '30'], output='screen')
+                    arguments=[controller, '--switch-timeout', '30'], output='screen',
+                    condition=condition)
+
+    # The four-wheel-steering driver, in Python or in C++
+    python = LaunchConfigurationEquals('controller', 'python')
+    cpp = LaunchConfigurationEquals('controller', 'cpp')
 
     return LaunchDescription([
         # Which world to load: a file name from this package's worlds folder, without .sdf
@@ -53,6 +59,11 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'scanner_rate', default_value='10',
             description='Profiles per second of each line scanner'),
+        DeclareLaunchArgument(
+            'controller', default_value='python', choices=['python', 'cpp'],
+            description='Four-wheel-steering driver: python (joint group controllers, '
+                        'four_ws_driver and wheel_odometry nodes) or cpp (agri_ugv_four_ws '
+                        'controller in the controller manager)'),
         # Where to put the robot (default: the world origin, 10 cm above the ground there)
         DeclareLaunchArgument('x', default_value='0.0', description='Robot start x [m]'),
         DeclareLaunchArgument('y', default_value='0.0', description='Robot start y [m]'),
@@ -99,16 +110,18 @@ def generate_launch_description():
 
         # Controllers: they wait until the robot (and its controller manager) exists
         spawner('joint_state_broadcaster'),
-        spawner('steering_controller'),
-        spawner('wheel_controller'),
+        spawner('steering_controller', python),
+        spawner('wheel_controller', python),
+        # The C++ driver: /cmd_vel -> steering angles and wheel speeds, and wheel odometry
+        spawner('four_ws_controller', cpp),
 
         # Our driver: /cmd_vel -> steering angles and wheel speeds, on simulation time
         Node(package='agri_ugv_control', executable='four_ws_driver', output='screen',
-             parameters=[{'use_sim_time': True}]),
+             parameters=[{'use_sim_time': True}], condition=python),
 
         # Wheel odometry: body velocity from the measured steering angles and wheel speeds
         Node(package='agri_ugv_control', executable='wheel_odometry', output='screen',
-             parameters=[{'use_sim_time': True}]),
+             parameters=[{'use_sim_time': True}], condition=python),
 
         # Simulated RTK receiver: ideal fixes + realistic errors, and the dual-antenna heading
         Node(package='agri_ugv_localization', executable='gnss_errors', output='screen',
