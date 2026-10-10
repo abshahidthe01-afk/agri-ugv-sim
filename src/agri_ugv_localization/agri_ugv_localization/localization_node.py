@@ -23,9 +23,11 @@ Parameters:  world_file (its <spherical_coordinates>), the GNSS error model:
              wheel_slip_speed, wheel_slip_turn: trust the wheels less at speed and while
              turning (the gyro sees turns, the wheels miss the slides that come with them)
              use_rows (true, read at every row measurement): correct the position across
-             the crop rows when the row was found; rows_sigma [m] (0.02) is a measurement's
-             uncertainty, and one further than rows_gate (3) of the combined uncertainties
-             from the estimate is refused
+             the crop rows when the row was found; rows_sigma [m] is a measurement's own
+             noise, rows_bias_sigma [m] and rows_bias_tau [s] the bias the measurements of
+             one lane share (it starts afresh once the robot has moved rows_bias_distance [m]
+             across the rows, or after rows_bias_gap [s] without a measurement); one further
+             than rows_gate (3) of the combined uncertainties from the estimate is refused
 
 The IMU's own orientation output is not used: in Gazebo it is perfect, a real one is not.
 """
@@ -59,7 +61,8 @@ class LocalizationNode(Node):
         super().__init__('localization')
         p = {name: self.declare_parameter(name, default).value for name, default in [
             ('world_file', ''), ('gnss_shared_sigma', 0.010), ('gnss_shared_tau', 60.0),
-            ('gnss_own_sigma', 0.003), ('gyro_sigma', 0.0005), ('tilt_time', 1.0)]}
+            ('gnss_own_sigma', 0.003), ('gyro_sigma', 0.0005), ('tilt_time', 1.0),
+            ('rows_bias_sigma', 0.015), ('rows_bias_tau', 60.0)]}
         self.declare_parameter('latency_compensation', True)     # read at every fix
         self.declare_parameter('wheel_slip_speed', 0.5)          # read at every IMU sample
         self.declare_parameter('wheel_slip_turn', 1.0)
@@ -68,7 +71,10 @@ class LocalizationNode(Node):
         self.declare_parameter('use_rows', True)                 # read at every row measurement
         self.declare_parameter('rows_sigma', 0.02)
         self.declare_parameter('rows_gate', 3.0)
+        self.declare_parameter('rows_bias_distance', 0.2)      # read at every row measurement
+        self.declare_parameter('rows_bias_gap', 2.0)
         self.rows = {'used': 0, 'refused': 0, 'moved': 0.0}
+        self.lane = None          # (across position, time) where the rows' bias started
         self.tilt = TiltEstimator(self.declare_parameter('tilt_gyro_time', 10.0).value)
         self.acceleration, self.last_wheels, self.last_heading = (0.0, 0.0), None, None
         self.rate, self.ages = 0.0, []
@@ -166,7 +172,9 @@ class LocalizationNode(Node):
             self.ekf = PoseEkf(x - c * fx + s * fy, y - s * fx - c * fy, yaw,
                                0.02, math.sqrt(variance),
                                gnss_sigma=self.gnss_sigma,
-                               gnss_tau=self.params['gnss_shared_tau'])
+                               gnss_tau=self.params['gnss_shared_tau'],
+                               rows_bias_sigma=self.params['rows_bias_sigma'],
+                               rows_bias_tau=self.params['rows_bias_tau'])
             self.get_logger().info(f'started at x {self.ekf.x[0]:.3f} y {self.ekf.x[1]:.3f} '
                                    f'yaw {math.degrees(yaw):.2f} deg')
 
@@ -247,13 +255,14 @@ class LocalizationNode(Node):
         vx, vy = self.velocity
         measured += (dx * (math.cos(yaw) * vx - math.sin(yaw) * vy)
                      + dy * (math.sin(yaw) * vx + math.cos(yaw) * vy)) * age
-        value, variance = self.ekf.along((dx, dy))
+        self.follow_lane(dx * self.ekf.x[0] + dy * self.ekf.x[1], m['t'])
+        value, variance = self.ekf.rows_expected((dx, dy))
         sigma = self.get_parameter('rows_sigma').value
         if (measured - value) ** 2 > self.get_parameter('rows_gate').value ** 2 * (
                 variance + sigma ** 2):
             self.rows['refused'] += 1
         else:
-            self.ekf.update_along((dx, dy), measured, sigma ** 2)
+            self.ekf.update_rows((dx, dy), measured, sigma ** 2)
             self.rows['used'] += 1
             self.rows['moved'] += abs(measured - value)
         if self.rows['used'] + self.rows['refused'] == 100:
@@ -262,6 +271,17 @@ class LocalizationNode(Node):
                 f'{100 * self.rows["moved"] / max(1, self.rows["used"]):.1f} cm), '
                 f'{self.rows["refused"]} refused as too far off')
             self.rows = {'used': 0, 'refused': 0, 'moved': 0.0}
+
+    def follow_lane(self, across, time):
+        """Start the rows' bias afresh in a new lane: moved across the rows, or a gap."""
+        if self.lane is not None:
+            start, last = self.lane
+            if (abs(across - start) <= self.get_parameter('rows_bias_distance').value
+                    and time - last <= self.get_parameter('rows_bias_gap').value):
+                self.lane = (start, time)
+                return
+        self.ekf.restart_rows()
+        self.lane = (across, time)
 
     def publish(self, stamp, gyro):
         """Publish the current estimate with its uncertainty."""

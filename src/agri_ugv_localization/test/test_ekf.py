@@ -153,8 +153,8 @@ def test_worse_gnss_lets_the_shared_error_grow_and_a_new_solution_starts_it_afre
     ekf.update_position((0.15, 0.0), (0.0, 0.0), np.diag([9e-6, 9e-6]))
     assert ekf.P[0, 4] != 0.0
     ekf.restart_gnss(0.01)
-    assert ekf.x[4:] == pytest.approx([0.0, 0.0])
-    assert ekf.P[4:, :4] == pytest.approx(np.zeros((2, 4)))
+    assert ekf.x[4:6] == pytest.approx([0.0, 0.0])
+    assert ekf.P[4:6, :4] == pytest.approx(np.zeros((2, 4)))
     assert ekf.P[4, 4] == ekf.P[5, 5] == pytest.approx(1e-4)
     with pytest.raises(ValueError):
         ekf.set_gnss_sigma(0.0)
@@ -220,10 +220,38 @@ def test_a_measurement_across_the_rows_moves_the_robot_across_and_reveals_the_gn
         for lever in ((0.6, 0.0), (-0.6, 0.0)):
             ekf.update_position((lever[0], 0.2), lever, np.diag([9e-6, 9e-6]))
     assert ekf.x[1] > 0.05                                 # pulled off by the GNSS error
-    value, variance = ekf.along((0.0, 1.0))
-    assert value == pytest.approx(ekf.x[1]) and variance == pytest.approx(ekf.P[1, 1])
+    ekf.restart_rows()
+    value, variance = ekf.rows_expected((0.0, 1.0))
+    assert value == pytest.approx(ekf.x[1])
+    assert variance == pytest.approx(ekf.P[1, 1] + 0.015 ** 2)   # position + the rows' bias
     east = ekf.x[0]
-    ekf.update_along((0.0, 1.0), 0.0, 0.02 ** 2)          # the rows: the robot is at y = 0
+    ekf.update_rows((0.0, 1.0), 0.0, 0.02 ** 2)           # the rows: the robot is at y = 0
     assert ekf.x[1] == pytest.approx(0.0, abs=0.01)
     assert ekf.x[5] == pytest.approx(0.2, abs=0.02)        # so the GNSS is 20 cm off north
     assert ekf.x[0] == pytest.approx(east, abs=1e-3)
+
+
+def test_row_measurements_of_one_lane_share_a_bias_that_does_not_average_away():
+    """RTK fixed 1 cm off to the south, the rows 2 cm off to the north: 20 s along a lane."""
+    rng = np.random.default_rng(3)
+    ekf = PoseEkf(0.0, 0.0, 0.0, 0.01, 0.001)
+    sigma_speed = wheel_speed_sigma(0.02, 0.5, 0.0, 0.5, 1.0)
+    ekf.restart_rows()
+    for step in range(1, 2001):
+        ekf.predict(0.01, 0.5, 0.0, 0.0, sigma_speed, 0.0005)
+        if step % 10 == 0:
+            x = 0.005 * step
+            for lever in ((0.6, 0.0), (-0.6, 0.0)):
+                fix = (x + lever[0] + rng.normal(0, 0.003), -0.01 + rng.normal(0, 0.003))
+                ekf.update_position(fix, lever, np.diag([9e-6, 9e-6]))
+        if step % 25 == 0:                                 # the rows, 4 times a second
+            ekf.update_rows((0.0, 1.0), 0.02 + rng.normal(0, 0.01), 0.02 ** 2)
+    sigma = math.sqrt(ekf.P[1, 1])
+    # between the two, nearer the GNSS (1 cm against 1.5 cm); and as unsure as that leaves it
+    assert -0.01 < ekf.x[1] < 0.01
+    assert 0.006 < sigma < 0.012
+    assert abs(ekf.x[1]) < 2 * sigma
+    ekf.x[6], ekf.P[6, 1] = 0.01, 1e-5
+    ekf.restart_rows()                                     # a new lane: a new bias
+    assert ekf.x[6] == 0.0 and ekf.P[6, 1] == 0.0
+    assert ekf.P[6, 6] == pytest.approx(0.015 ** 2)

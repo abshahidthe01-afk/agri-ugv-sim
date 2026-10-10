@@ -1,11 +1,14 @@
 """
 A 2D extended Kalman filter for the robot's pose: position, heading and gyro bias.
 
-State x = [px, py, yaw, gyro_bias, gnss_east, gnss_north] in the world frame (metres,
-radians, rad/s, metres). The last two are the GNSS error shared by both antennas: it drifts
-slowly, so the filter models it instead of trusting every fix as independent; otherwise it
-would report a position five times more certain than it is. How far it drifts depends on
-the GNSS quality (set_gnss_sigma); a new GNSS solution starts it afresh (restart_gnss).
+State x = [px, py, yaw, gyro_bias, gnss_east, gnss_north, rows_bias] in the world frame
+(metres, radians, rad/s, metres). gnss_east and gnss_north are the GNSS error shared by
+both antennas: it drifts slowly, so the filter models it instead of trusting every fix as
+independent; otherwise it would report a position five times more certain than it is. How
+far it drifts depends on the GNSS quality (set_gnss_sigma); a new GNSS solution starts it
+afresh (restart_gnss). rows_bias is the same for the crop row measurements: in one lane
+they are off by about the same amount (the plants the LiDAR sees on each side are not the
+same), so they do not average out; every lane starts it afresh (restart_rows).
 Predict: wheel odometry gives the body velocity (how far), the gyroscope the turn rate
 (how much it turned); both carry noise, so the uncertainty P grows. Correct: a GNSS
 antenna position or the dual-antenna heading pulls the state towards the measurement,
@@ -26,12 +29,19 @@ class PoseEkf:
     """Pose filter: predict with wheels and gyro, correct with GNSS positions and heading."""
 
     def __init__(self, x, y, yaw, sigma_position, sigma_yaw, sigma_bias=0.001,
-                 gnss_sigma=0.010, gnss_tau=60.0):
-        """Start at a measured pose; gnss_sigma and gnss_tau describe the shared GNSS drift."""
-        self.x = np.array([x, y, yaw, 0.0, 0.0, 0.0])
+                 gnss_sigma=0.010, gnss_tau=60.0, rows_bias_sigma=0.015,
+                 rows_bias_tau=60.0):
+        """
+        Start at a measured pose.
+
+        gnss_sigma and gnss_tau [m, s] describe the shared GNSS drift, rows_bias_sigma and
+        rows_bias_tau the row measurements' bias in a lane.
+        """
+        self.x = np.array([x, y, yaw, 0.0, 0.0, 0.0, 0.0])
         self.P = np.diag([sigma_position ** 2, sigma_position ** 2, sigma_yaw ** 2,
-                          sigma_bias ** 2, gnss_sigma ** 2, gnss_sigma ** 2])
+                          sigma_bias ** 2, gnss_sigma ** 2, gnss_sigma ** 2, rows_bias_sigma ** 2])
         self.gnss_sigma, self.gnss_tau = gnss_sigma, gnss_tau
+        self.rows_bias_sigma, self.rows_bias_tau = rows_bias_sigma, rows_bias_tau
 
     def predict(self, dt, vx, vy, gyro, sigma_speed, sigma_gyro, sigma_bias_walk=1e-5):
         """
@@ -42,26 +52,30 @@ class PoseEkf:
         """
         if dt <= 0:
             return
-        px, py, yaw, bias, east, north = self.x
+        px, py, yaw, bias, east, north, rows = self.x
         rate = gyro - bias
         mid = yaw + rate * dt / 2
         c, s = math.cos(mid), math.sin(mid)
         dx_dyaw = (-s * vx - c * vy) * dt          # how the step moves when the heading moves
         dy_dyaw = (c * vx - s * vy) * dt
         fade = math.exp(-dt / self.gnss_tau)               # the shared GNSS error drifts
+        fade_rows = math.exp(-dt / self.rows_bias_tau)          # and the rows' bias
         self.x = np.array([px + (c * vx - s * vy) * dt, py + (s * vx + c * vy) * dt,
-                           wrap(yaw + rate * dt), bias, fade * east, fade * north])
-        F = np.eye(6)
+                           wrap(yaw + rate * dt), bias, fade * east, fade * north,
+                           fade_rows * rows])
+        F = np.eye(7)
         F[0, 2], F[1, 2], F[2, 3] = dx_dyaw, dy_dyaw, -dt
         F[0, 3], F[1, 3] = -dx_dyaw * dt / 2, -dy_dyaw * dt / 2
         F[4, 4] = F[5, 5] = fade
-        G = np.zeros((6, 3))                         # effect of (vx, vy, gyro) noise
+        F[6, 6] = fade_rows
+        G = np.zeros((7, 3))                         # effect of (vx, vy, gyro) noise
         G[:3] = [[c * dt, -s * dt, dx_dyaw * dt / 2], [s * dt, c * dt, dy_dyaw * dt / 2],
                  [0.0, 0.0, dt]]
         Q = G @ np.diag([sigma_speed ** 2, sigma_speed ** 2, sigma_gyro ** 2]) @ G.T
         Q[3, 3] += sigma_bias_walk ** 2 * dt
         Q[4, 4] += self.gnss_sigma ** 2 * (1 - fade ** 2)
         Q[5, 5] += self.gnss_sigma ** 2 * (1 - fade ** 2)
+        Q[6, 6] += self.rows_bias_sigma ** 2 * (1 - fade_rows ** 2)
         self.P = F @ self.P @ F.T + Q
 
     def update_position(self, measured, lever, covariance):
@@ -72,12 +86,12 @@ class PoseEkf:
         (forward, left), already corrected for the robot's tilt; covariance (2 x 2) is the
         antenna's own noise only: the shared drift is part of the state.
         """
-        px, py, yaw, _, east, north = self.x
+        px, py, yaw, _, east, north, _ = self.x
         c, s = math.cos(yaw), math.sin(yaw)
         predicted = np.array([px + c * lever[0] - s * lever[1] + east,
                               py + s * lever[0] + c * lever[1] + north])
-        H = np.array([[1.0, 0.0, -s * lever[0] - c * lever[1], 0.0, 1.0, 0.0],
-                      [0.0, 1.0, c * lever[0] - s * lever[1], 0.0, 0.0, 1.0]])
+        H = np.array([[1.0, 0.0, -s * lever[0] - c * lever[1], 0.0, 1.0, 0.0, 0.0],
+                      [0.0, 1.0, c * lever[0] - s * lever[1], 0.0, 0.0, 1.0, 0.0]])
         self._correct(np.asarray(measured) - predicted, H, np.asarray(covariance))
 
     def set_gnss_sigma(self, sigma):
@@ -94,31 +108,50 @@ class PoseEkf:
         to the pose. The pose stays as it is; the next fixes pull it.
         """
         self.set_gnss_sigma(sigma)
-        self.x[4:] = 0.0
-        self.P[4:, :] = 0.0
-        self.P[:, 4:] = 0.0
+        self.x[4:6] = 0.0
+        self.P[4:6, :] = 0.0
+        self.P[:, 4:6] = 0.0
         self.P[4, 4] = self.P[5, 5] = self.gnss_sigma ** 2
 
-    def along(self, direction):
-        """Return (value, variance) of the estimated position along a world direction."""
-        d = np.asarray(direction, dtype=float)
-        return float(d @ self.x[:2]), float(d @ self.P[:2, :2] @ d)
-
-    def update_along(self, direction, measured, variance):
+    def restart_rows(self):
         """
-        Correct with the robot's position measured along a world direction (unit vector).
+        Start the row measurements' bias afresh, for a new lane: 0, spread rows_bias_sigma.
 
-        For example across crop rows, seen by the LiDAR: the rows are where the map puts
-        them, so this is the robot's own position, without the shared GNSS error; with the
-        GNSS fixes it also tells that error in this direction.
+        The bias comes from which plants the LiDAR sees on either side of the robot, so in
+        another lane (or after driving through no rows) it is a new one.
+        """
+        self.x[6] = 0.0
+        self.P[6, :] = 0.0
+        self.P[:, 6] = 0.0
+        self.P[6, 6] = self.rows_bias_sigma ** 2
+
+    def rows_expected(self, direction):
+        """
+        Return (value, variance) of a row measurement: position along direction + rows' bias.
+
+        direction is a world unit vector, across the crop rows.
         """
         d = np.asarray(direction, dtype=float)
-        H = np.array([[d[0], d[1], 0.0, 0.0, 0.0, 0.0]])
-        self._correct(np.array([measured - d @ self.x[:2]]), H, np.array([[variance]]))
+        H = np.array([d[0], d[1], 0.0, 0.0, 0.0, 0.0, 1.0])
+        return float(H @ self.x), float(H @ self.P @ H)
+
+    def update_rows(self, direction, measured, variance):
+        """
+        Correct with the robot's position across the crop rows, seen by the LiDAR.
+
+        The rows are where the map puts them, so this is the robot's own position (plus the
+        rows' bias), without the shared GNSS error; with the GNSS fixes it also tells that
+        error in this direction. variance is the measurement's own noise; the bias it
+        shares with the others of its lane is part of the state (restart_rows).
+        """
+        d = np.asarray(direction, dtype=float)
+        H = np.array([[d[0], d[1], 0.0, 0.0, 0.0, 0.0, 1.0]])
+        value, _ = self.rows_expected(direction)
+        self._correct(np.array([measured - value]), H, np.array([[variance]]))
 
     def update_yaw(self, measured, variance):
         """Correct with a measured heading [rad] and its variance."""
-        H = np.array([[0.0, 0.0, 1.0, 0.0, 0.0, 0.0]])
+        H = np.array([[0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0]])
         self._correct(np.array([wrap(measured - self.x[2])]), H, np.array([[variance]]))
 
     def _correct(self, innovation, H, R):
@@ -127,7 +160,7 @@ class PoseEkf:
         K = self.P @ H.T @ np.linalg.inv(S)
         self.x = self.x + K @ innovation
         self.x[2] = wrap(self.x[2])
-        I_KH = np.eye(6) - K @ H
+        I_KH = np.eye(len(self.x)) - K @ H
         self.P = I_KH @ self.P @ I_KH.T + K @ R @ K.T      # Joseph form: stays symmetric
 
 
