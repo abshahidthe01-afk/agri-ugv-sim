@@ -27,44 +27,50 @@ per cell, seen from above, on the cells the map has seen.
 
 ## Map and true canopy
 
-RTK fixed GNSS, plots 198, 197, 188 and 187 (14678 profiles, about 730 s simulated), map placed
+RTK fixed GNSS, plots 198, 197, 188 and 187 (12726 profiles, about 630 s simulated), map placed
 with Gazebo's true pose:
 
 | Plot | Crop | Seen | Cover: truth / map | Canopy height: truth / map |
 |---|---|---|---|---|
-| 198 | Sugar beet | 91 % | 66 % / 43 % | 31.9 / 32.4 cm |
-| 197 | Summer wheat | 83 % | 98 % / 98 % | 70.1 / 75.1 cm |
-| 188 | Soybean | 94 % | 47 % / 53 % | 31.7 / 35.0 cm |
-| 187 | Potato | 87 % | 65 % / 52 % | 42.2 / 40.7 cm |
+| 198 | Sugar beet | 73 % | 90 % / 96 % | 32.2 / 33.9 cm |
+| 197 | Summer wheat | 63 % | 97 % / 97 % | 70.0 / 75.7 cm |
+| 188 | Soybean | 76 % | 59 % / 57 % | 31.8 / 33.7 cm |
+| 187 | Potato | 72 % | 81 % / 85 % | 42.3 / 43.3 cm |
 
-The map placed with the robot's own pose estimate is the same within 1 point of cover and
-0.1 cm of height.
+Cover is within -1 to +6 points of the truth, canopy height within +1.0 to +5.7 cm. The map
+placed with the robot's own pose estimate (0.9 cm mean error across the rows) is the same
+within 3 points of cover and 0.1 cm of height. The scanners see the plants at a slant, so
+part of each plot stays hidden behind leaves (seen 63-76 %).
 
-**Cover is off because of how Gazebo's GPU lidar sees the leaves.** The leaves are textured
-cards whose transparent parts the cameras cut away, drawn from both sides. A ray cast of the
-two scanners against the same plant meshes and terrain, at Gazebo's recorded true poses
-(550 profiles), shows what the lidar does:
+The heights read high partly because the ground under the scanned strip lies up to 1.5 cm
+above the plane of the wheels (median per plot and scanner -0.1 to +1.5 cm, measured in the
+profiles). Wheat reads highest: its rows are picture strips whose top edge stands above the
+drawn ears, and the scanners see the whole strip (below).
 
-| Plant points per profile | Sugar beet | Summer wheat | Soybean | Potato |
+### Why the leaves are shaped in the mesh
+
+Gazebo's GPU lidar ignores the textures' transparency and the back sides of faces; the
+cameras show neither. With leaves as plain textured cards, a ray cast of the two scanners
+against the same meshes and terrain, at Gazebo's recorded true poses (550 profiles), matched
+Gazebo only when it did the same:
+
+| Plant points per profile, leaf cards | Sugar beet | Summer wheat | Soybean | Potato |
 |---|---|---|---|---|
 | Gazebo | 42 | 293 | 77 | 43 |
-| Ray cast: whole leaf cards, front side only | 43 | 293 | 79 | 43 |
+| Ray cast: whole cards, front side only | 43 | 293 | 79 | 43 |
 | Ray cast: drawn leaves, both sides (as the cameras show them) | 154 | 256 | 94 | 105 |
 
-The lidar ignores the textures' transparency and the back sides of the leaves. Real
-scanners see both sides of real leaves, so the cover measured here is a property of the
-simulation, not of the scanners.
-
-The heights are within -1.5 to +4.9 cm of the truth. The leaf cards stand a little above the
-drawn leaves, and the ground under the scanned strip lies up to 1.5 cm above the plane of
-the wheels (median per plot and scanner -0.1 to +1.5 cm, measured in the profiles); both
-raise the heights.
+The map then had cover 22 points too low in sugar beet and 13 in potato. So each leaf is
+now four quads, each as wide as the drawn leaf in its part of the texture, and every face
+is in the mesh twice, once facing each way (2.34 million plant triangles in the field, 0.65
+million before; one mesh per plot, so a sensor draws only the plots in its view). Wheat's
+row strips and canopy are still whole pictures.
 
 ## Localization and the map
 
 Float GNSS (the base station's corrections stopped: shared error drifting towards 20 cm),
-plot 198, 102.6 s mission, 2249 profiles. The same profiles, placed with four poses, recorded
-at the same time (the robot drove with its own estimate):
+plot 198, 102.6 s mission, 2249 profiles, with the earlier leaf cards. The same profiles,
+placed with four poses, recorded at the same time (the robot drove with its own estimate):
 
 | Pose | Error across the rows (mean) | Rows off the field map | Row sharpness |
 |---|---|---|---|
@@ -79,6 +85,11 @@ sharpness. With them the map is as good as with the true pose. Along the rows th
 error stays (10.1 cm mean with the row corrections, 9.5 cm without): rows do not show where
 along them the robot is. Cover and height changed by at most 1 point and 0.1 cm: they do
 not show a wrong pose, the rows do.
+
+With the shaped leaves the LiDAR sees both sides of the leaves, and the row measurement's
+near-side shift comes out negative (about -3 cm; before, it could not go below 0). With that
+allowed, the robot's pose is 0.9 cm off across the rows on average with RTK fixed GNSS (plots
+198, 197, 188 and 187; on plot 198, 1.4 cm on the two passes along the plot's sides).
 
 Limits: one float run over one plot; 10 profiles per second per scanner (the real scanners
 take 200; more overloaded the simulation).
