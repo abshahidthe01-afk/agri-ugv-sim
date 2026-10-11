@@ -100,6 +100,49 @@ the median grew from 0.9 to 1.4 cm, with the current one only to 1.0 cm. Within 
 about half of the top surface has a point: at 10 profiles per second and 0.5 m/s the
 profiles lie 5 cm apart along the rows (the real scanners take 200 per second).
 
+## Colour from the dome cameras
+
+With `cameras:=top` (the 4 cameras of the dome's top ring, 640 x 480 pixels, 2 pictures per
+second; see the [robot spec](robot_spec.md)) the node colours the 3D points
+(`agri_ugv_phenotyping/colour.py`). A picture is used 1 s after it was taken, together with
+the scanner points of the last 3 s. Each point is projected into it, with the robot's pose
+at the picture's time, the camera's place in the robot model and its calibration
+(camera_info), and takes the colour there if the camera sees it:
+
+- it lies inside the enclosure (outside, the curtains and side panels hide it), and
+- no other point lies in front of it. The depth test keeps the nearest point per block of
+  4 x 4 pixels and compares each point with the nearest in the 7 x 7 blocks around it,
+  about 7 cm on the plants: more than the 5 cm between two profiles, through whose gap the
+  camera would otherwise see a point that lies hidden under a leaf.
+
+The 1 s wait lets the profiles just ahead of the scan line arrive, whose leaves may hide
+points. Each voxel keeps the mean colour of the pictures that saw it and how many did; the
+PLY holds the colour (grey where no camera saw the point) and `views`. `canopy_truth --cloud`
+reports how well the colours tell the true leaves (points within 1.5 cm of a leaf) from the
+soil (lower than 2 cm, no leaf within 3 cm): the share of each with a plant's colour (excess
+green 2g - r - b above 0.1, with r + g + b = 1).
+
+Plot 198, the 4 top cameras:
+
+| Points placed with, depth test | Points coloured | Plant colour on the leaves | on the soil |
+|---|---|---|---|
+| true pose, none (each point against its own block only) | 82 % | 97.7 % | 83.7 % |
+| true pose, 5 x 5 blocks, 3 cm | 59 % | 97.0 % | 16.3 % |
+| true pose, 7 x 7 blocks, 5 cm (used) | 57 % | 97.1 % | 1.1 % |
+| the robot's estimate, the same | 57 % | 96.8 % | 1.4 % |
+| the robot's estimate, live in a survey (2 pictures per second) | 58 % | 95.9 % | 1.4 % |
+
+The first four rows are one recorded survey (1 picture per second per camera). About 40 %
+of the points stay grey: the lower leaves and the plants' sides, which the slanted scanners
+see and the cameras above do not. Colour and height agree on what is plant: about 98 % of
+the points on leaves are also higher than 6 cm. In sugar beet, whose leaves stand well above
+the soil, the colour adds the model's colour rather than a better plant mask. The 4 cameras
+take the real-time factor from 0.64 to 0.49 (robot driving, scanners off); the plants lie in
+the roof's shade (mean brightness 37 of 255; the real robot lights them with LED panels and
+closes curtains), so the picture below shows the colours brightened.
+
+![Plot 198: the laser line scanners' 3D points, coloured by the dome cameras](images/plant_cloud_198.png)
+
 ## Localization and the map
 
 Float GNSS (the base station's corrections stopped: shared error drifting towards 20 cm),

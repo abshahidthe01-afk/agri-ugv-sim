@@ -5,6 +5,8 @@
 A four-wheel-steering field robot in simulation, built to drive between crop
 rows on real terrain. ROS 2 Humble and Gazebo Fortress.
 
+![Plot 198: the laser line scanners' 3D points, coloured by the dome cameras](docs/images/plant_cloud_198.png)
+
 ## Status
 
 - Thorvald-style robot model with suspension ([robot spec](docs/robot_spec.md))
@@ -29,12 +31,14 @@ rows on real terrain. ROS 2 Humble and Gazebo Fortress.
   with the generated plants; crop rows in the map show localization errors; and a 3D point
   cloud of every plot, its points a median 1.0 cm from the true leaves
   ([plant map](docs/plant_map.md))
+- Camera and laser fusion: the dome cameras colour the 3D points (plant colour on 96 % of the
+  points on leaves, 1 % of those on the soil)
 
 First whole-field run (baseline, all 80 plots, 4.2 km): 643 of 643 segments in 2.85 h
 of simulated time; localization error 1.9 cm mean; wheels crushed plants on 32.5 % of
 their travel inside plots, 92 % of that in the dense cereal and mixture plots.
 
-Next: row-aware passes, LiDAR row following.
+Next: the final whole-field run with everything.
 
 ## Quick start
 
