@@ -32,7 +32,10 @@ rows on real terrain. ROS 2 Humble and Gazebo Fortress.
   cloud of every plot, its points a median 1.0 cm from the true leaves
   ([plant map](docs/plant_map.md))
 - Camera and laser fusion: the dome cameras colour the 3D points (plant colour on 96 % of the
-  points on leaves, 1 % of those on the soil)
+  points on leaves, 1 % of those on the soil), shown live in RViz with the robot model
+- 3D reconstruction from the dome cameras: at a stop, the 20 cameras' depth images fused into
+  a coloured mesh of the plants, its leaf points a median 1.9 mm from the true leaves (the
+  depth is simulated exactly; see the [plant map](docs/plant_map.md))
 
 First whole-field run (baseline, all 80 plots, 4.2 km): 643 of 643 segments in 2.85 h
 of simulated time; localization error 1.9 cm mean; wheels crushed plants on 32.5 % of

@@ -143,6 +143,73 @@ closes curtains), so the picture below shows the colours brightened.
 
 ![Plot 198: the laser line scanners' 3D points, coloured by the dome cameras](images/plant_cloud_198.png)
 
+### Live in RViz
+
+`survey.launch.py rviz:=true` opens RViz with `rviz/plant_cloud.rviz`: the 3D points of the
+latest 4 plots (parameter `cloud_plots`; a plot is about 3 MB) in the cameras' colours, made
+twice as bright (`display_gain`; the saved clouds keep the true colours), grey where no
+camera saw them, on `/plant_map/cloud_3d` every 2 s; and the robot model, half see-through,
+at the localization's pose (it publishes the transform map -> base_footprint).
+
+## 3D reconstruction from the dome cameras
+
+The line scanners cut the plants into profiles 5 cm apart. The real robot's main 3D method
+is its camera dome (Esser et al. 2023, see the [robot spec](robot_spec.md)): it stops on
+each plot, all 20 cameras take a picture at the same moment, the cameras' poses are found
+from the pictures, and a signed distance field fitted to them gives a textured mesh
+(Marching Cubes). Here the same at one stop, with one difference: the cameras measure depth
+themselves (`camera_depth:=true`, RGB-D cameras), so the matching of the pictures, the hard
+part on the real robot, is not simulated.
+
+```bash
+ros2 launch agri_ugv_navigation mission.launch.py plots:=198 cameras:=all camera_depth:=true camera_rate:=1 scanners:=false
+ros2 run agri_ugv_phenotyping capture_depth --output ~/plant_maps/depth_198
+ros2 service call /mission/start std_srvs/srv/Trigger
+# once the capture is saved:
+ros2 run agri_ugv_phenotyping reconstruct ~/plant_maps/depth_198.npz --truth
+```
+
+`capture_depth` waits until the robot has driven 3.5 m (into the plot), stops the mission,
+and keeps the first set of pictures all cameras take at the same moment once the robot
+stands still. `reconstruct` (`agri_ugv_phenotyping/reconstruct.py`) then:
+
+- fuses the 20 depth images into a truncated signed distance field of 4 mm voxels, 1.2 x 1.2
+  x 0.6 m under the dome: each voxel within 3 voxels of a surface a camera sees gets its
+  distance to that surface along the view, averaged over the cameras. Only those voxels
+  change. When every camera also marked the free space it sees, the cameras looking past a
+  thin leaf's edge erased the leaf the others saw: the leaves' top surface within 5 mm fell
+  from 94 to 74 %;
+- cuts the surface at distance zero with Marching Cubes (scikit-image), only in cubes whose
+  eight corners all have a distance;
+- colours each vertex with the mean of the pictures that see it (its depth there within 6 mm
+  of the depth image) and drops the faces no picture sees (a third of them, left-overs of
+  the distance field under the soil);
+- saves the mesh (`<name>_mesh.ply`, robot frame, with colours) and a picture
+  (`<name>_mesh.png`); `--truth` compares it with the true leaves at Gazebo's true pose.
+
+Plot 198 (sugar beet), one stop on the first pass; both compared on the same 1.1 x 1.1 m:
+
+| | Dome cameras, one stop (mesh) | Laser line scanners (3D cloud of a survey) |
+|---|---|---|
+| Points with a plant's colour / higher than 6 cm | 287 569 vertices | 6 406 points |
+| Their distance to the true leaves: median / 95 % | 1.9 / 8.9 mm | 11.1 / 37.4 mm |
+| Leaves' top surface (1 cm cells) within 5 mm / 1 cm / 2 cm | 94 / 99 / 100 % | 2 / 10 / 47 % |
+
+The laser cloud's profiles are placed with Gazebo's true pose (with the robot's estimate:
+14.6 mm median, 40 % within 2 cm). The mesh has 994 000 faces, 4.55 m2 of leaf and soil;
+fusing takes 15-45 s on a laptop, the truth check and the picture 1-2 minutes more. The
+capture ran at a real-time factor of 0.31 (20 RGB-D cameras and the LiDAR), so the cameras
+measure depth only when asked.
+
+What the simulation leaves out: the depth here is exact, rendered by Gazebo; the real robot
+computes it from 45-megapixel pictures (Esser et al. report 0.43 mm precision and leaf areas
+within 1.9 %), so these numbers show the fusion and the mesh, not the picture matching.
+Our 640 x 480 pictures and 4 mm voxels limit the detail. One stop covers what the dome sees
+(about 1.2 x 1.2 m), and the mesh lies in the robot's frame: placed in the field with the
+robot's estimate, it moves with that estimate's error (2.0 cm in this capture).
+
+![Plot 198: one of the dome pictures, the 3D reconstruction from all 20 cameras in its colours, and coloured by height](images/reconstruction_198.jpg)
+
 ## Localization and the map
 
 Float GNSS (the base station's corrections stopped: shared error drifting towards 20 cm),
