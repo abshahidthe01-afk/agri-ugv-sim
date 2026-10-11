@@ -1,6 +1,6 @@
 """Tests for colouring the scanners' points from the camera pictures (colour.py)."""
 
-from agri_ugv_phenotyping.cloud import PlotCloud, read_ply
+from agri_ugv_phenotyping.cloud import display_rows, PlotCloud, read_ply
 from agri_ugv_phenotyping.colour import Colourist, excess_green, GREEN, nearest_in_front, \
     project, robot_points
 import numpy as np
@@ -112,3 +112,25 @@ def test_a_cloud_keeps_the_mean_colour_and_views_per_voxel(tmp_path):
     grey = fields['views'] == 0
     assert fields['red'][grey][0] == fields['green'][grey][0] == 128
     assert any(c.startswith('colour:') for c in comments)
+
+
+def test_a_cloud_to_show_lies_in_the_world_brighter_and_grey_where_unseen():
+    plot = {'type': 'plot', 'plot_id': 198, 'crop': 'Sugar Beet', 'genotype': '',
+            'variant': '', 'centre_x': 10.0, 'centre_y': 5.0, 'width': 6.0, 'length': 8.0,
+            'heading_deg': 90.0}                                   # rows run north
+    cloud = PlotCloud(plot, voxel=0.01)
+    xy = np.array([[10.0025, 5.0025], [11.0025, 6.0025], [10.5025, 4.0025]])
+    cloud.add(xy, [0.3025, 0.0025, 0.1025])
+    cloud.add([[30.0, 5.0]], [0.0])                                # outside the plot
+    assert cloud.version == 1
+    cloud.add_colours(xy[:2], [0.3025, 0.0025], [(40, 120, 30), (200, 100, 50)])
+    assert cloud.version == 2
+    points, colours = cloud.world(gain=2.0)
+    order = np.argsort(points[:, 2])[::-1]                         # leaf, middle, soil
+    assert points[order] == pytest.approx(np.column_stack([xy[[0, 2, 1]],
+                                                           [0.3025, 0.1025, 0.0025]]))
+    assert colours[order].tolist() == [[80, 240, 60], [128, 128, 128], [255, 200, 100]]
+    rows = display_rows(points[order], colours[order])
+    assert rows.itemsize == 16 and rows['rgb'][0] == (80 << 16) | (240 << 8) | 60
+    assert rows['z'][0] == pytest.approx(0.3025)
+    assert len(display_rows(np.zeros((0, 3)), np.zeros((0, 3)))) == 0

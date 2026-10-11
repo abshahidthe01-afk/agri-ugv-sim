@@ -7,7 +7,8 @@ the wheels stand on, as in plant_map), merged per 'voxel' (a cube: the mean of t
 it and how many there were). A plot then holds about 150 000 points (1 cm voxels) however
 long the robot scans it. Saved as a PLY file per plot, which point cloud viewers open.
 With the dome cameras (colour.Colourist) each voxel also gets the mean colour the cameras saw
-there, and how many pictures saw it.
+there, and how many pictures saw it. world() and display_rows() give a cloud to show live
+(the plant_map node publishes the latest plots' clouds for RViz).
 
 compare() checks a cloud against the true leaves (truth.true_leaves): how far its plant
 points lie from the leaves (accuracy) and how much of the leaves' top surface it has
@@ -21,6 +22,8 @@ from agri_ugv_phenotyping.colour import excess_green, GREEN
 import numpy as np
 
 HEIGHTS = (-0.5, 3.0)   # [m] points lower or higher than this are not plants or soil
+GREY = 128              # the colour shown where no camera saw a point
+DISPLAY = np.dtype([('x', '<f4'), ('y', '<f4'), ('z', '<f4'), ('rgb', '<u4')])
 
 
 def to_plot_frame(plot, xy, height):
@@ -48,6 +51,7 @@ class PlotCloud:
         self.views = np.zeros(0, dtype=np.int32)          # colour samples per voxel
         self.waiting, self.waiting_colours = [], []
         self.waiting_points = 0
+        self.version = 0                                  # grows with every change
 
     def _inside(self, xy, height):
         """Return world points in the plot frame and which of them lie inside the plot."""
@@ -60,6 +64,7 @@ class PlotCloud:
         """Add world points (xy N x 2, heights N); return how many fell inside the plot."""
         points, inside = self._inside(xy, height)
         if inside.any():
+            self.version += 1
             self.waiting.append(points[inside])
             self.waiting_points += int(inside.sum())
             if self.waiting_points >= self.batch:
@@ -70,6 +75,7 @@ class PlotCloud:
         """Add the colours (N x 3, RGB) a camera saw at points already added (world)."""
         points, inside = self._inside(xy, height)
         if inside.any():
+            self.version += 1
             self.waiting_colours.append((points[inside],
                                          np.asarray(colours, dtype=float)[inside]))
             self.waiting_points += int(inside.sum())
@@ -125,6 +131,20 @@ class PlotCloud:
         views = self.views[kept].astype(np.int64)
         return self.colour_sums[kept].astype(float) / np.maximum(views, 1)[:, None], views
 
+    def world(self, gain=1.0):
+        """
+        Return the voxels to show: points (N x 3: world x, y and the height) and colours.
+
+        The colours (N x 3, 0-255) are the cameras' mean colour times 'gain' (the plants lie
+        in the roof's shade), grey where no camera saw the point.
+        """
+        points, _ = self.points()
+        colours, views = self.colours()
+        centre, along, across = plot_frame(self.plot)
+        xy = centre + points[:, :1] * along + points[:, 1:2] * across
+        shown = np.where(views[:, None] > 0, np.clip(np.round(colours * gain), 0, 255), GREY)
+        return np.column_stack([xy, points[:, 2]]), shown.astype(np.uint8)
+
     def save(self, path):
         """Save the cloud as a PLY file (plot frame); return the number of points."""
         points, counts = self.points()
@@ -137,11 +157,25 @@ class PlotCloud:
         if views.any():
             comments.append('colour: mean of the pictures of the dome cameras that saw the '
                             'point (views); grey where none did')
-            shown = np.where(views[:, None] > 0, np.round(colours), 128).astype(np.uint8)
+            shown = np.where(views[:, None] > 0, np.round(colours), GREY).astype(np.uint8)
             write_ply(path, points, counts, shown, comments, views)
         else:
             write_ply(path, points, counts, comments=comments)
         return len(points)
+
+
+def display_rows(points, colours):
+    """
+    Return points (N x 3) and their colours (N x 3, 0-255) as rows of DISPLAY.
+
+    The colour is packed into one number, 0x00RRGGBB, as RViz (and PCL) read a field 'rgb'.
+    """
+    rows = np.zeros(len(points), dtype=DISPLAY)
+    if len(rows):
+        rows['x'], rows['y'], rows['z'] = np.asarray(points, dtype=float).T
+        rgb = np.asarray(colours).astype(np.uint32)
+        rows['rgb'] = (rgb[:, 0] << 16) | (rgb[:, 1] << 8) | rgb[:, 2]
+    return rows
 
 
 def write_ply(path, points, counts=None, colors=None, comments=(), views=None):

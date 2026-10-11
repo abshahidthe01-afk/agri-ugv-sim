@@ -16,13 +16,21 @@ Subscribes:  /scanners/left, /scanners/right (sensor_msgs/LaserScan)   the profi
                                             pictures of the cameras the robot model has
 Publishes:   /plant_map/cloud (sensor_msgs/PointCloud2, frame 'map')   the cells higher
              than 'low' at their height, every publish_period seconds
+             /plant_map/cloud_3d (sensor_msgs/PointCloud2, frame 'map', with 'rgb')   the 3D
+                                            points of the latest cloud_plots plots, coloured
+                                            by the cameras (grey: unseen), every cloud_period
+                                            seconds (rviz/plant_cloud.rviz shows them)
 Services:    /plant_map/save (std_srvs/Trigger)   save the map now
 Parameters:  layout_file (default: the MuST-C plot layout of agri_ugv_field), cell [m]
              (0.05), low [m] (0.06), pose_topic, publish_period [s] (5.0), quiet [s] (30.0),
              voxel [m] (0.01; 0: none): every plot's 3D point cloud, merged per voxel
              (agri_ugv_phenotyping.cloud), colour_delay [s] (1.0): a picture colours the
              points once the profiles measured this long after it have arrived (colour.
-             Colourist), output (default ~/plant_maps/plant_map): the map
+             Colourist), cloud_plots (4): how many plots, the latest mapped, the 3D topic
+             shows (0: none; one plot is about 3 MB), cloud_period [s] (2.0), display_gain
+             (2.0): the colours shown are brighter by this factor (the plants lie in the
+             roof's shade; the saved clouds keep the true colours),
+             output (default ~/plant_maps/plant_map): the map
              is saved as output.npz (rasters), output.json (traits per plot) and
              output_cloud_<plot_id>.ply (the clouds)
 """
@@ -36,6 +44,7 @@ import os
 from agri_ugv_field.layout import read_layout_csv
 from agri_ugv_navigation.obstacles import mount
 from agri_ugv_navigation.rows import pose_at
+from agri_ugv_phenotyping.cloud import display_rows
 from agri_ugv_phenotyping.colour import Colourist
 from agri_ugv_phenotyping.plant_map import FieldMap, place, profile_points
 from ament_index_python.packages import get_package_share_directory
@@ -75,16 +84,25 @@ def traits_text(t):
     return text
 
 
-def cloud(xyz, stamp):
-    """Return points (N x 3) as a PointCloud2 in the frame 'map'."""
+def cloud(xyz, stamp, rgb=None):
+    """
+    Return points (N x 3) as a PointCloud2 in the frame 'map'.
+
+    With rgb (rows of cloud.display_rows: x, y, z and the packed colour) instead of xyz,
+    the cloud has a field 'rgb'.
+    """
+    if rgb is None:
+        data, names = np.asarray(xyz, dtype='<f4'), ('x', 'y', 'z')
+    else:
+        data, names = rgb, ('x', 'y', 'z', 'rgb')
     msg = PointCloud2()
     msg.header.stamp, msg.header.frame_id = stamp, 'map'
-    msg.height, msg.width = 1, len(xyz)
+    msg.height, msg.width = 1, len(data)
     msg.fields = [PointField(name=name, offset=4 * k, datatype=PointField.FLOAT32, count=1)
-                  for k, name in enumerate('xyz')]
-    msg.is_bigendian, msg.point_step, msg.is_dense = False, 12, True
-    msg.row_step = 12 * len(xyz)
-    msg.data = array.array('B', np.asarray(xyz, dtype='<f4').tobytes())
+                  for k, name in enumerate(names)]
+    msg.is_bigendian, msg.point_step, msg.is_dense = False, 4 * len(names), True
+    msg.row_step = msg.point_step * len(data)
+    msg.data = array.array('B', data.tobytes())
     return msg
 
 
@@ -101,6 +119,7 @@ class PlantMapNode(Node):
         value = {name: self.declare_parameter(name, default).value for name, default in [
             ('cell', 0.05), ('low', 0.06), ('pose_topic', '/localization/odometry'),
             ('publish_period', 5.0), ('quiet', 30.0), ('voxel', 0.01), ('colour_delay', 1.0),
+            ('cloud_plots', 4), ('cloud_period', 2.0), ('display_gain', 2.0),
             ('output', os.path.join(os.path.expanduser('~'), 'plant_maps', 'plant_map'))]}
         self.quiet = value['quiet']
         self.period, self.output = value['publish_period'], value['output']
@@ -109,9 +128,14 @@ class PlantMapNode(Node):
         self.colourist, self.camera_mounts, self.pictures = None, {}, 0
         self.history = deque(maxlen=400)               # (t, x, y, yaw) of the pose
         self.mounts, self.reported = {}, {}
-        self.last = {'publish': None, 'check': None}
+        self.last = {'publish': None, 'check': None, 'cloud': None}
+        self.shown = {}                                # plot_id: (version, display rows)
+        self.cloud_plots, self.cloud_period = value['cloud_plots'], value['cloud_period']
+        self.display_gain = value['display_gain']
         self.profiles, self.unplaced = 0, 0
         self.publisher = self.create_publisher(PointCloud2, '/plant_map/cloud', 1)
+        self.cloud_publisher = self.create_publisher(PointCloud2, '/plant_map/cloud_3d', 1) \
+            if self.map.clouds and self.cloud_plots > 0 else None
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(String, '/robot_description', self.on_description, latched)
         self.create_subscription(String, '/mission/status', self.on_status, latched)
@@ -193,6 +217,10 @@ class PlantMapNode(Node):
         if self.last['publish'] is None or t - self.last['publish'] >= self.period:
             self.last['publish'] = t
             self.publish(msg.header.stamp)
+        if self.cloud_publisher is not None and (
+                self.last['cloud'] is None or t - self.last['cloud'] >= self.cloud_period):
+            self.last['cloud'] = t
+            self.publish_cloud(msg.header.stamp)
 
     def check(self, t):
         """Once a second: log the traits of the plots the robot has left since they changed."""
@@ -214,6 +242,19 @@ class PlantMapNode(Node):
         xyz = np.vstack([np.column_stack([xy, h]) for xy, h in parts]) if parts else \
             np.zeros((0, 3))
         self.publisher.publish(cloud(xyz, stamp))
+
+    def publish_cloud(self, stamp):
+        """Publish the 3D points of the latest plots, in their colours."""
+        latest = sorted(self.map.changed, key=self.map.changed.get)[-self.cloud_plots:]
+        for plot_id in latest:
+            plot_cloud = self.map.clouds[plot_id]
+            if self.shown.get(plot_id, (None,))[0] != plot_cloud.version:   # it has changed
+                self.shown[plot_id] = (plot_cloud.version, display_rows(
+                    *plot_cloud.world(self.display_gain)))
+        self.shown = {plot_id: self.shown[plot_id] for plot_id in latest}
+        rows = [rows for _, rows in self.shown.values()]
+        self.cloud_publisher.publish(cloud(None, stamp, np.concatenate(rows) if rows else
+                                           display_rows(np.zeros((0, 3)), np.zeros((0, 3)))))
 
     def save(self):
         """Log the traits of the plots not yet reported; save the map. Return a message."""
