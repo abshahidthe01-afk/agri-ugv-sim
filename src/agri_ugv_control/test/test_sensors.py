@@ -202,6 +202,20 @@ def test_the_dome_cameras_take_pictures_only_when_asked():
         'ignition-gazebo-sensors-system') == 1                  # the cameras need it too
 
 
+def test_the_dome_cameras_measure_depth_only_when_asked():
+    plain = [s.get('type') for s in model(controllers_file='x', cameras='all').iter('sensor')]
+    assert 'rgbd_camera' not in plain
+    root = model(controllers_file='x', cameras='all', camera_depth='true')
+    depth = {s.get('name'): s for s in root.iter('sensor') if s.get('type') == 'rgbd_camera'}
+    assert sorted(depth) == sorted(f'dome_camera_{i}' for i in range(20))
+    for i in range(20):                     # the picture keeps its topic: <topic>/image
+        sensor = depth[f'dome_camera_{i}']
+        assert sensor.findtext('topic') == f'/cameras/dome_{i}'
+        assert sensor.findtext('ignition_frame_id') == f'dome_camera_{i}_optical_link'
+        assert int(sensor.findtext('camera/image/width')) == 640
+    assert cameras(root) == {}
+
+
 @pytest.mark.parametrize('index', range(16, 20))
 def test_a_top_camera_looks_from_in_front_of_its_lens_at_the_plant(index):
     root = model(controllers_file='x', cameras='top')

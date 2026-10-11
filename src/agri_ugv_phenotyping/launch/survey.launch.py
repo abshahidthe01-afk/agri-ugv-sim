@@ -29,6 +29,7 @@ MISSION_ARGUMENTS = [
     ('scanner_rate', '10', 'Profiles per second of each line scanner'),
     ('cameras', 'none', 'Dome cameras that take pictures: none, top or all'),
     ('camera_rate', '2', 'Pictures per second of each camera'),
+    ('camera_depth', 'false', 'true: the dome cameras also measure depth'),
     ('controller', 'cpp', 'Four-wheel-steering driver: cpp or python'),
 ]
 

@@ -25,7 +25,8 @@ def generate_launch_description():
                  ' scanners:=', LaunchConfiguration('scanners'),
                  ' scanner_rate:=', LaunchConfiguration('scanner_rate'),
                  ' cameras:=', LaunchConfiguration('cameras'),
-                 ' camera_rate:=', LaunchConfiguration('camera_rate')]), value_type=str)
+                 ' camera_rate:=', LaunchConfiguration('camera_rate'),
+                 ' camera_depth:=', LaunchConfiguration('camera_depth')]), value_type=str)
 
     def spawner(controller, condition=None):
         """
@@ -68,6 +69,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'camera_rate', default_value='2', description='Pictures per second of each camera'),
         DeclareLaunchArgument(
+            'camera_depth', default_value='false', choices=['true', 'false'],
+            description='true: the dome cameras also measure depth (RGB-D, for 3D '
+                        'reconstruction; costs more rendering time)'),
+        DeclareLaunchArgument(
             'controller', default_value='cpp', choices=['cpp', 'python'],
             description='Four-wheel-steering driver: cpp (agri_ugv_four_ws controller in the '
                         'controller manager) or python (joint group controllers, '
@@ -105,7 +110,8 @@ def generate_launch_description():
         # - the IMU, and the GNSS antennas' ideal fixes (errors are added below)
         # - the LiDAR's point cloud (when it is on the robot)
         # - the line scanners' profiles (when they measure)
-        # - the dome cameras' pictures and calibration (when they take pictures)
+        # - the dome cameras' pictures and calibration (when they take pictures), and their
+        #   depth images (when they also measure depth)
         Node(package='ros_gz_bridge', executable='parameter_bridge',
              arguments=['/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock',
                         '/ground_truth/odom@nav_msgs/msg/Odometry[ignition.msgs.Odometry',
@@ -119,7 +125,9 @@ def generate_launch_description():
                         *[f'/cameras/dome_{i}/image@sensor_msgs/msg/Image[ignition.msgs.Image'
                           for i in range(20)],
                         *[f'/cameras/dome_{i}/camera_info@sensor_msgs/msg/CameraInfo'
-                          '[ignition.msgs.CameraInfo' for i in range(20)]]),
+                          '[ignition.msgs.CameraInfo' for i in range(20)],
+                        *[f'/cameras/dome_{i}/depth_image@sensor_msgs/msg/Image'
+                          '[ignition.msgs.Image' for i in range(20)]]),
 
         # Controllers: they wait until the robot (and its controller manager) exists
         spawner('joint_state_broadcaster'),

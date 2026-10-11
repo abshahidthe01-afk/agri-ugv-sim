@@ -211,8 +211,11 @@
        (45 megapixels, Esser et al. 2023); here a small image, a few per second, assumed lens:
        every image renders the plants. The image is taken just in front of the lens, from
        dome_camera_<index>_optical_link (x forward, as the camera link), and published on
-       /cameras/dome_<index>/image, its calibration on /cameras/dome_<index>/camera_info. -->
-  <xacro:macro name="dome_camera_sensor" params="index rate width height fov">
+       /cameras/dome_<index>/image, its calibration on /cameras/dome_<index>/camera_info.
+       With depth, the camera also measures each pixel's depth (an RGB-D camera; the real
+       robot gets depth by matching its cameras' pictures): /cameras/dome_<index>/depth_image,
+       metres along the view (32FC1). -->
+  <xacro:macro name="dome_camera_sensor" params="index rate width height fov depth:=false">
     <link name="dome_camera_${index}_optical_link"/>
     <joint name="dome_camera_${index}_optical_joint" type="fixed">
       <parent link="dome_camera_${index}_link"/>
@@ -220,10 +223,10 @@
       <origin xyz="0.095 0 0" rpy="0 0 0"/>
     </joint>
     <gazebo reference="dome_camera_${index}_optical_link">
-      <sensor name="dome_camera_${index}" type="camera">
+      <sensor name="dome_camera_${index}" type="${'rgbd_camera' if depth else 'camera'}">
         <always_on>true</always_on>
         <update_rate>${rate}</update_rate>
-        <topic>/cameras/dome_${index}/image</topic>
+        <topic>/cameras/dome_${index}${'' if depth else '/image'}</topic>
         <ignition_frame_id>dome_camera_${index}_optical_link</ignition_frame_id>
         <visualize>false</visualize>
         <camera>
@@ -248,12 +251,13 @@
   </xacro:macro>
 
   <!-- the dome cameras first..last (indices) as sensors -->
-  <xacro:macro name="dome_camera_sensors" params="first last rate width height fov">
+  <xacro:macro name="dome_camera_sensors" params="first last rate width height fov depth:=false">
     <xacro:dome_camera_sensor index="${first}" rate="${rate}" width="${width}"
-                              height="${height}" fov="${fov}"/>
+                              height="${height}" fov="${fov}" depth="${depth}"/>
     <xacro:if value="${first &lt; last}">
       <xacro:dome_camera_sensors first="${first + 1}" last="${last}" rate="${rate}"
-                                 width="${width}" height="${height}" fov="${fov}"/>
+                                 width="${width}" height="${height}" fov="${fov}"
+                                 depth="${depth}"/>
     </xacro:if>
   </xacro:macro>
 
