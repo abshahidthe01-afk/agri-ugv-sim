@@ -173,6 +173,16 @@ class FieldMap:
                     self.clouds[plot_id].add(xy, points[:, 2])
         return placed
 
+    def add_colours(self, xy, height, colours):
+        """Add colours the cameras saw at world points (xy N x 2) to the plots' clouds."""
+        if not self.clouds or len(xy) == 0:
+            return 0
+        xy = np.asarray(xy, dtype=float)
+        middle = xy.mean(axis=0)
+        near = np.hypot(*(self.centres - middle).T) <= self.radius
+        return sum(self.clouds[plot_id].add_colours(xy, height, colours)
+                   for plot_id in self.ids[near])
+
     def traits(self):
         """Return the traits of every plot with points (see PlotMap.traits), by plot_id."""
         return {plot_id: m.traits() for plot_id, m in self.maps.items() if m.count.any()}

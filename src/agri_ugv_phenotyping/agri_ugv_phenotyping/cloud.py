@@ -6,6 +6,8 @@ kept, in the plot's own frame (x along the rows, y across them, z the height abo
 the wheels stand on, as in plant_map), merged per 'voxel' (a cube: the mean of the points in
 it and how many there were). A plot then holds about 150 000 points (1 cm voxels) however
 long the robot scans it. Saved as a PLY file per plot, which point cloud viewers open.
+With the dome cameras (colour.Colourist) each voxel also gets the mean colour the cameras saw
+there, and how many pictures saw it.
 
 compare() checks a cloud against the true leaves (truth.true_leaves): how far its plant
 points lie from the leaves (accuracy) and how much of the leaves' top surface it has
@@ -15,6 +17,7 @@ points on (completeness), without SciPy: nearest_distances searches a grid.
 import itertools
 
 from agri_ugv_field.plants import plot_frame
+from agri_ugv_phenotyping.colour import excess_green, GREEN
 import numpy as np
 
 HEIGHTS = (-0.5, 3.0)   # [m] points lower or higher than this are not plants or soil
@@ -41,16 +44,34 @@ class PlotCloud:
         self.codes = np.zeros(0, dtype=np.int64)
         self.sums = np.zeros((0, 3), dtype=np.float32)    # float32: a field of plots fits
         self.counts = np.zeros(0, dtype=np.int32)
-        self.waiting = []
+        self.colour_sums = np.zeros((0, 3), dtype=np.float32)
+        self.views = np.zeros(0, dtype=np.int32)          # colour samples per voxel
+        self.waiting, self.waiting_colours = [], []
         self.waiting_points = 0
 
-    def add(self, xy, height):
-        """Add world points (xy N x 2, heights N); return how many fell inside the plot."""
+    def _inside(self, xy, height):
+        """Return world points in the plot frame and which of them lie inside the plot."""
         points = to_plot_frame(self.plot, xy, height)
         inside = np.all(np.abs(points[:, :2]) <= self.half, axis=1) & \
             (points[:, 2] >= HEIGHTS[0]) & (points[:, 2] < HEIGHTS[1])
+        return points, inside
+
+    def add(self, xy, height):
+        """Add world points (xy N x 2, heights N); return how many fell inside the plot."""
+        points, inside = self._inside(xy, height)
         if inside.any():
             self.waiting.append(points[inside])
+            self.waiting_points += int(inside.sum())
+            if self.waiting_points >= self.batch:
+                self._merge()
+        return int(inside.sum())
+
+    def add_colours(self, xy, height, colours):
+        """Add the colours (N x 3, RGB) a camera saw at points already added (world)."""
+        points, inside = self._inside(xy, height)
+        if inside.any():
+            self.waiting_colours.append((points[inside],
+                                         np.asarray(colours, dtype=float)[inside]))
             self.waiting_points += int(inside.sum())
             if self.waiting_points >= self.batch:
                 self._merge()
@@ -64,38 +85,67 @@ class PlotCloud:
         return (k[:, 0] * self.size[1] + k[:, 1]) * self.size[2] + k[:, 2]
 
     def _merge(self):
-        """Merge the waiting points into the voxels."""
-        if not self.waiting:
+        """Merge the waiting points and colours into the voxels."""
+        if not self.waiting and not self.waiting_colours:
             return
-        new = np.vstack(self.waiting)
-        self.waiting, self.waiting_points = [], 0
-        codes = np.concatenate([self.codes, self._code(new)])
-        sums = np.vstack([self.sums, new])
-        counts = np.concatenate([self.counts, np.ones(len(new), dtype=np.int32)])
+        new = np.vstack(self.waiting) if self.waiting else np.zeros((0, 3))
+        seen = np.vstack([p for p, _ in self.waiting_colours]) if self.waiting_colours \
+            else np.zeros((0, 3))
+        rgb = np.vstack([c for _, c in self.waiting_colours]) if self.waiting_colours \
+            else np.zeros((0, 3))
+        self.waiting, self.waiting_colours, self.waiting_points = [], [], 0
+        n, m = len(new), len(seen)
+        codes = np.concatenate([self.codes, self._code(new), self._code(seen)])
+        sums = np.vstack([self.sums, new, np.zeros((m, 3))])
+        counts = np.concatenate([self.counts, np.ones(n), np.zeros(m)])
+        colour_sums = np.vstack([self.colour_sums, np.zeros((n, 3)), rgb])
+        views = np.concatenate([self.views, np.zeros(n), np.ones(m)])
         self.codes, index = np.unique(codes, return_inverse=True)
-        self.sums = np.column_stack([np.bincount(index, sums[:, k], len(self.codes))
-                                     for k in range(3)]).astype(np.float32)
-        self.counts = np.bincount(index, counts, len(self.codes)).astype(np.int32)
+
+        def total(values):
+            return np.bincount(index, values, len(self.codes))
+
+        self.sums = np.column_stack([total(sums[:, k]) for k in range(3)]).astype(np.float32)
+        self.counts = total(counts).astype(np.int32)
+        self.colour_sums = np.column_stack(
+            [total(colour_sums[:, k]) for k in range(3)]).astype(np.float32)
+        self.views = total(views).astype(np.int32)
 
     def points(self):
         """Return each voxel's mean point (N x 3, plot frame) and how many points it holds."""
         self._merge()
-        return self.sums.astype(float) / self.counts[:, None], self.counts.astype(np.int64)
+        kept = self.counts > 0
+        return (self.sums[kept].astype(float) / self.counts[kept, None],
+                self.counts[kept].astype(np.int64))
+
+    def colours(self):
+        """Return each voxel's mean colour (N x 3, RGB 0-255; 0 if unseen) and its views."""
+        self._merge()
+        kept = self.counts > 0
+        views = self.views[kept].astype(np.int64)
+        return self.colour_sums[kept].astype(float) / np.maximum(views, 1)[:, None], views
 
     def save(self, path):
         """Save the cloud as a PLY file (plot frame); return the number of points."""
         points, counts = self.points()
         centre, along, _ = plot_frame(self.plot)
-        write_ply(path, points, counts, comments=[
-            f'plot {self.plot["plot_id"]} ({self.plot["crop"]}), voxel {self.voxel} m',
-            'x along the rows, y across them, z height above the ground [m], from the '
-            f'plot centre ({centre[0]:.3f}, {centre[1]:.3f}) in the world frame, x towards '
-            f'({along[0]:.6f}, {along[1]:.6f})'])
+        comments = [f'plot {self.plot["plot_id"]} ({self.plot["crop"]}), voxel {self.voxel} m',
+                    'x along the rows, y across them, z height above the ground [m], from the '
+                    f'plot centre ({centre[0]:.3f}, {centre[1]:.3f}) in the world frame, '
+                    f'x towards ({along[0]:.6f}, {along[1]:.6f})']
+        colours, views = self.colours()
+        if views.any():
+            comments.append('colour: mean of the pictures of the dome cameras that saw the '
+                            'point (views); grey where none did')
+            shown = np.where(views[:, None] > 0, np.round(colours), 128).astype(np.uint8)
+            write_ply(path, points, counts, shown, comments, views)
+        else:
+            write_ply(path, points, counts, comments=comments)
         return len(points)
 
 
-def write_ply(path, points, counts=None, colors=None, comments=()):
-    """Write points (N x 3) as a binary PLY, with point counts and RGB colours if given."""
+def write_ply(path, points, counts=None, colors=None, comments=(), views=None):
+    """Write points (N x 3) as a binary PLY, with point counts, RGB colours, views if given."""
     points = np.asarray(points, dtype=float)
     fields = [('x', '<f4'), ('y', '<f4'), ('z', '<f4')]
     header = ['ply', 'format binary_little_endian 1.0', *[f'comment {c}' for c in comments],
@@ -107,6 +157,9 @@ def write_ply(path, points, counts=None, colors=None, comments=()):
     if colors is not None:
         fields += [('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
         header += ['property uchar red', 'property uchar green', 'property uchar blue']
+    if views is not None:
+        fields.append(('views', '<u4'))
+        header.append('property uint views')
     rows = np.zeros(len(points), dtype=fields)
     rows['x'], rows['y'], rows['z'] = points.T
     if counts is not None:
@@ -114,6 +167,8 @@ def write_ply(path, points, counts=None, colors=None, comments=()):
     if colors is not None:
         colors = np.asarray(colors)
         rows['red'], rows['green'], rows['blue'] = colors[:, 0], colors[:, 1], colors[:, 2]
+    if views is not None:
+        rows['views'] = views
     with open(path, 'wb') as out:
         out.write(('\n'.join(header + ['end_header']) + '\n').encode('ascii'))
         out.write(rows.tobytes())
@@ -222,7 +277,7 @@ def top_surface(points, cell=0.01):
     return points[order][first]
 
 
-def compare(cloud, leaves, low=0.06, seen_cell=0.05, radius=0.05):
+def compare(cloud, leaves, low=0.06, seen_cell=0.05, radius=0.05, colours=None, views=None):
     """
     Compare a plot's cloud with its true leaves (both N x 3, plot frame).
 
@@ -231,7 +286,10 @@ def compare(cloud, leaves, low=0.06, seen_cell=0.05, radius=0.05):
     1 cm. completeness: of the leaves' top surface (seen from above, plant parts
     higher than 'low', in the 'seen_cell' columns the cloud has points in), the share with a
     cloud point within 2 cm and within 5 cm. The leaves should be sampled more finely than a
-    centimetre (truth.true_leaves).
+    centimetre (truth.true_leaves). With the points' colours (N x 3) and views (N, pictures
+    that saw each point): the share of points with a colour, and of those on a leaf (within
+    1.5 cm of one) and on the soil (lower than 2 cm, no leaf within 3 cm), the share with a
+    plant's colour (colour.GREEN).
     """
     cloud, leaves = np.asarray(cloud, dtype=float), np.asarray(leaves, dtype=float)
     plants = cloud[cloud[:, 2] > low]
@@ -249,4 +307,17 @@ def compare(cloud, leaves, low=0.06, seen_cell=0.05, radius=0.05):
             'within_1cm': float(np.mean(distances <= 0.01)) if len(plants) else None,
             'top_points': int(len(top)),
             'complete_2cm': float(np.mean(back <= 0.02)) if len(top) else None,
-            'complete_5cm': float(np.mean(back <= 0.05)) if len(top) else None}
+            'complete_5cm': float(np.mean(back <= 0.05)) if len(top) else None,
+            **({} if colours is None else colour_scores(cloud, leaves, colours, views))}
+
+
+def colour_scores(cloud, leaves, colours, views):
+    """Return how well the points' colours tell the leaves from the soil (see compare)."""
+    seen = np.asarray(views) > 0
+    distance = nearest_distances(cloud[seen], leaves, 0.05)
+    green = excess_green(np.asarray(colours)[seen]) > GREEN
+    leaf = distance <= 0.015
+    soil = (cloud[seen, 2] < 0.02) & ~(distance <= 0.03)
+    return {'coloured': float(seen.mean()) if len(seen) else 0.0,
+            'leaf_green': float(green[leaf].mean()) if leaf.any() else None,
+            'soil_green': float(green[soil].mean()) if soil.any() else None}

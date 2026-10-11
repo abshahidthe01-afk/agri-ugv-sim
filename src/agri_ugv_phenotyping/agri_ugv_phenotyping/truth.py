@@ -149,6 +149,12 @@ def cloud_text(plot, result):
         lines.append(f'  completeness: of the true top surface (where the cloud has points) '
                      f'{100 * result["complete_2cm"]:.0f} % has a point within 2 cm, '
                      f'{100 * result["complete_5cm"]:.0f} % within 5 cm')
+    if 'coloured' in result:
+        line = f'  colour: {100 * result["coloured"]:.0f} % of the points seen by a camera'
+        if result['leaf_green'] is not None and result['soil_green'] is not None:
+            line += (f'; plant colour on {100 * result["leaf_green"]:.1f} % of those on the '
+                     f'true leaves, on {100 * result["soil_green"]:.1f} % of those on the soil')
+        lines.append(line)
     return '\n'.join(lines)
 
 
@@ -182,11 +188,14 @@ def main(argv=None):
         return ground_height(grid, x, y)
 
     if args.cloud:
-        points, _, comments = read_ply(Path(args.cloud).expanduser())
+        points, fields, comments = read_ply(Path(args.cloud).expanduser())
         plot_id = int(comments[0].split()[1])          # 'plot <plot_id> (<crop>), ...'
         [plot] = [p for p in plots if p['plot_id'] == plot_id]
         leaves = true_leaves(plots, ground, {plot_id}, args.seed)[plot_id]
-        print(cloud_text(plot, compare(points, leaves, args.low)))
+        colours = np.column_stack([fields[c] for c in ('red', 'green', 'blue')]) \
+            if 'views' in fields else None
+        print(cloud_text(plot, compare(points, leaves, args.low, colours=colours,
+                                       views=fields.get('views'))))
         return
     saved = np.load(Path(args.map).expanduser()) if args.map else None
     if saved is not None:

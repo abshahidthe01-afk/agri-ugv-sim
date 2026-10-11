@@ -4,19 +4,25 @@ ROS node: map the plants of every plot with the laser line scanners while the ro
 Each profile is placed with the robot's pose at its time (agri_ugv_phenotyping.plant_map).
 When no new points have reached a plot for 'quiet' seconds (the robot has left it), the
 plot's traits are logged; when the mission is complete, or on request, the map is saved.
+When the robot's dome cameras take pictures (sim.launch.py cameras:=top), the 3D points
+get the colours the cameras see (agri_ugv_phenotyping.colour).
 
 Subscribes:  /scanners/left, /scanners/right (sensor_msgs/LaserScan)   the profiles
              /localization/odometry (nav_msgs/Odometry)   the pose, kept for 4 s (topic:
                                             parameter pose_topic, e.g. /ground_truth/odom)
              /robot_description (std_msgs/String, latched)   where the scanners sit
              /mission/status (std_msgs/String, latched)   saves the map when 'complete'
+             /cameras/dome_<i>/image, /camera_info (sensor_msgs/Image, CameraInfo)   the
+                                            pictures of the cameras the robot model has
 Publishes:   /plant_map/cloud (sensor_msgs/PointCloud2, frame 'map')   the cells higher
              than 'low' at their height, every publish_period seconds
 Services:    /plant_map/save (std_srvs/Trigger)   save the map now
 Parameters:  layout_file (default: the MuST-C plot layout of agri_ugv_field), cell [m]
              (0.05), low [m] (0.06), pose_topic, publish_period [s] (5.0), quiet [s] (30.0),
              voxel [m] (0.01; 0: none): every plot's 3D point cloud, merged per voxel
-             (agri_ugv_phenotyping.cloud), output (default ~/plant_maps/plant_map): the map
+             (agri_ugv_phenotyping.cloud), colour_delay [s] (1.0): a picture colours the
+             points once the profiles measured this long after it have arrived (colour.
+             Colourist), output (default ~/plant_maps/plant_map): the map
              is saved as output.npz (rasters), output.json (traits per plot) and
              output_cloud_<plot_id>.ply (the clouds)
 """
@@ -30,18 +36,20 @@ import os
 from agri_ugv_field.layout import read_layout_csv
 from agri_ugv_navigation.obstacles import mount
 from agri_ugv_navigation.rows import pose_at
-from agri_ugv_phenotyping.plant_map import FieldMap, profile_points
+from agri_ugv_phenotyping.colour import Colourist
+from agri_ugv_phenotyping.plant_map import FieldMap, place, profile_points
 from ament_index_python.packages import get_package_share_directory
 from nav_msgs.msg import Odometry
 import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
-from sensor_msgs.msg import LaserScan, PointCloud2, PointField
+from sensor_msgs.msg import CameraInfo, Image, LaserScan, PointCloud2, PointField
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
 SIDES = ('left', 'right')
+CAMERAS = range(20)     # the dome cameras' numbers (agri_ugv_description payload.xacro)
 
 
 def stamp_seconds(msg):
@@ -92,11 +100,13 @@ class PlantMapNode(Node):
             plots = [p for p in read_layout_csv(text.read()) if p['type'] == 'plot']
         value = {name: self.declare_parameter(name, default).value for name, default in [
             ('cell', 0.05), ('low', 0.06), ('pose_topic', '/localization/odometry'),
-            ('publish_period', 5.0), ('quiet', 30.0), ('voxel', 0.01),
+            ('publish_period', 5.0), ('quiet', 30.0), ('voxel', 0.01), ('colour_delay', 1.0),
             ('output', os.path.join(os.path.expanduser('~'), 'plant_maps', 'plant_map'))]}
         self.quiet = value['quiet']
         self.period, self.output = value['publish_period'], value['output']
         self.map = FieldMap(plots, value['cell'], value['low'], voxel=value['voxel'])
+        self.colour_delay = value['colour_delay']
+        self.colourist, self.camera_mounts, self.pictures = None, {}, 0
         self.history = deque(maxlen=400)               # (t, x, y, yaw) of the pose
         self.mounts, self.reported = {}, {}
         self.last = {'publish': None, 'check': None}
@@ -121,6 +131,41 @@ class PlantMapNode(Node):
                 pass
         if not self.mounts:
             self.get_logger().info('No line scanners on the robot: no plant map')
+        if self.camera_mounts or not self.map.clouds or not self.mounts:
+            return                 # cameras found before, or no 3D clouds or scanners to colour
+        for i in CAMERAS:
+            try:
+                self.camera_mounts[i] = mount(msg.data, link=f'dome_camera_{i}_optical_link')
+            except ValueError:
+                continue
+            self.create_subscription(Image, f'/cameras/dome_{i}/image',
+                                     lambda m, i=i: self.on_picture(i, m), 4)
+            self.create_subscription(CameraInfo, f'/cameras/dome_{i}/camera_info',
+                                     lambda m, i=i: self.on_calibration(i, m), 2)
+        if self.camera_mounts:
+            self.colourist = Colourist({}, delay=self.colour_delay)
+            self.get_logger().info(f'{len(self.camera_mounts)} dome cameras take pictures: '
+                                   'the 3D points get their colours')
+
+    def on_calibration(self, i, msg):
+        """Keep a camera's calibration: from now on its pictures colour the points."""
+        if self.colourist is not None and i not in self.colourist.cameras:
+            self.colourist.cameras[i] = (self.camera_mounts[i], list(msg.k))
+
+    def on_picture(self, i, msg):
+        """Keep a picture until the profiles after it have arrived."""
+        if self.colourist is None or i not in self.colourist.cameras:
+            return
+        rows = np.frombuffer(bytes(msg.data), dtype=np.uint8).reshape(msg.height, msg.step)
+        image = rows[:, :msg.width * 3].reshape(msg.height, msg.width, 3)
+        if msg.encoding.lower().startswith('bgr'):
+            image = image[:, :, ::-1]
+        self.colourist.add_picture(stamp_seconds(msg), i, image)
+        self.pictures += 1
+
+    def pose_of(self, t):
+        """Return the pose (x, y, yaw) at time t from the kept poses, or None."""
+        return pose_at(self.history, t)
 
     def on_pose(self, msg):
         """Keep the poses of the last seconds."""
@@ -140,6 +185,10 @@ class PlantMapNode(Node):
         points = profile_points(msg.ranges, msg.angle_min, msg.angle_increment,
                                 msg.range_min, msg.range_max, self.mounts[side])
         self.map.add(points, pose, t)
+        if self.colourist is not None:
+            self.colourist.add_profile(t, place(points, pose), points[:, 2])
+            for xy, height, colours in self.colourist.ready(self.pose_of):
+                self.map.add_colours(xy, height, colours)
         self.check(t)
         if self.last['publish'] is None or t - self.last['publish'] >= self.period:
             self.last['publish'] = t
@@ -177,7 +226,8 @@ class PlantMapNode(Node):
         count = self.map.save(self.output)
         text = (f'{count} plot{"s" * (count != 1)} saved to {self.output}.npz and .json'
                 + (', 3D clouds to _cloud_<plot>.ply' if self.map.clouds else '')
-                + f' ({self.profiles} profiles, {self.unplaced} without a pose)')
+                + f' ({self.profiles} profiles, {self.unplaced} without a pose'
+                + (f', {self.pictures} pictures' if self.colourist is not None else '') + ')')
         self.get_logger().info('Plant map: ' + text)
         return True, text
 
