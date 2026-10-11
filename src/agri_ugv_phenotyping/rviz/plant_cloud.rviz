@@ -73,6 +73,29 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: false
+    - Alpha: 0.5
+      Class: rviz_default_plugins/RobotModel
+      Collision Enabled: false
+      Description File: ""
+      Description Source: Topic
+      Description Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robot_description
+      Enabled: true
+      Links:
+        All Links Enabled: true
+        Expand Joint Details: false
+        Expand Link Details: false
+        Expand Tree: false
+        Link Tree Style: Links in Alphabetic Order
+      Name: Robot (model at the estimated pose)
+      TF Prefix: ""
+      Update Interval: 0
+      Value: true
+      Visual Enabled: true
     - Angle Tolerance: 0.1
       Class: rviz_default_plugins/Odometry
       Covariance:
@@ -90,9 +113,9 @@ Visualization Manager:
           Scale: 1
           Value: false
         Value: false
-      Enabled: true
+      Enabled: false
       Keep: 1
-      Name: Robot (estimated pose)
+      Name: Robot (estimated pose, arrow)
       Position Tolerance: 0.1
       Shape:
         Alpha: 1
@@ -111,7 +134,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /localization/odometry
-      Value: true
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 40; 40; 40

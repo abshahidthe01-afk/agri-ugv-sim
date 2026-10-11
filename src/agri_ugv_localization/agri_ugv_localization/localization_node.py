@@ -8,6 +8,9 @@ Subscribes:  /robot_description (latched)   antenna offsets
              /rows/measurement (std_msgs/String, JSON)       the robot's place across the
                                             crop rows in the LiDAR (agri_ugv_navigation rows)
 Publishes:   /localization/odometry (nav_msgs/Odometry) pose in the world frame 'map'
+             /tf: map -> base_footprint, the same pose (x, y and heading; on the plane the
+                                            plant map's heights start from), so that RViz
+                                            can draw the robot model in the map
 Parameters:  world_file (its <spherical_coordinates>), the GNSS error model:
              gnss_shared_sigma, gnss_shared_tau, gnss_own_sigma. The shared error's spread
              follows the accuracy each fix reports (its covariance) when it reports one:
@@ -28,6 +31,8 @@ Parameters:  world_file (its <spherical_coordinates>), the GNSS error model:
              one lane share (it starts afresh once the robot has moved rows_bias_distance [m]
              across the rows, or after rows_bias_gap [s] without a measurement); one further
              than rows_gate (3) of the combined uncertainties from the estimate is refused
+             publish_tf (true): also publish the pose on /tf (false: when another node
+             publishes a transform to base_footprint)
 
 The IMU's own orientation output is not used: in Gazebo it is perfect, a real one is not.
 """
@@ -38,12 +43,14 @@ import math
 from agri_ugv_localization.ekf import (own_acceleration, PoseEkf, tilted_lever, TiltEstimator,
                                        wheel_speed_sigma)
 from agri_ugv_localization.frames import antenna_levers, spherical_coordinates, world_from_fix
+from geometry_msgs.msg import TransformStamped
 from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from sensor_msgs.msg import Imu, NavSatFix, NavSatStatus
 from std_msgs.msg import String
+from tf2_ros import TransformBroadcaster
 
 ANTENNAS = {'front': 'gnss_front_link', 'rear': 'gnss_rear_link'}
 
@@ -89,6 +96,8 @@ class LocalizationNode(Node):
         self.pitch, self.roll, self.fixes = 0.0, 0.0, {}
         self.gnss_sigma, self.last_fix, self.no_fix_since = p['gnss_shared_sigma'], None, None
         self.publisher = self.create_publisher(Odometry, '/localization/odometry', 10)
+        self.transforms = TransformBroadcaster(self) \
+            if self.declare_parameter('publish_tf', True).value else None
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(String, '/robot_description', self.on_description, latched)
         self.create_subscription(Imu, '/imu', self.on_imu, 50)
@@ -301,6 +310,14 @@ class LocalizationNode(Node):
         odom.twist.twist.linear.x, odom.twist.twist.linear.y = self.velocity
         odom.twist.twist.angular.z = float(gyro - bias)
         self.publisher.publish(odom)
+        if self.transforms is not None:
+            transform = TransformStamped()
+            transform.header = odom.header
+            transform.child_frame_id = odom.child_frame_id
+            transform.transform.translation.x = odom.pose.pose.position.x
+            transform.transform.translation.y = odom.pose.pose.position.y
+            transform.transform.rotation = odom.pose.pose.orientation
+            self.transforms.sendTransform(transform)
 
 
 def main(args=None):
