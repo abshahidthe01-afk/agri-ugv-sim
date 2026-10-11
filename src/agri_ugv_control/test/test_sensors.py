@@ -176,6 +176,20 @@ def test_the_scanner_rate_is_a_model_argument():
     assert rates == {'line_scanner_left': 25.0, 'line_scanner_right': 25.0}
 
 
+def test_only_the_steering_and_wheel_joints_take_commands_the_suspension_reports():
+    [system] = model(controllers_file='x').findall('ros2_control')
+    joints = {j.get('name'): j for j in system.findall('joint')}
+    corners = ('front_left', 'front_right', 'rear_left', 'rear_right')
+    assert sorted(joints) == sorted(f'{c}_{part}_joint' for c in corners
+                                    for part in ('steer', 'wheel', 'suspension'))
+    for name, joint in joints.items():
+        commands = [c.get('name') for c in joint.findall('command_interface')]
+        states = [c.get('name') for c in joint.findall('state_interface')]
+        assert states == ['position', 'velocity']
+        assert commands == {'steer': ['position'], 'wheel': ['velocity'],
+                            'suspension': []}[name.split('_')[-2]]
+
+
 def cameras(root):
     """Return the dome camera sensors of a model, by name."""
     return {s.get('name'): s for s in root.iter('sensor') if s.get('type') == 'camera'}

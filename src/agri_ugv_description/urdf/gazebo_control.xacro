@@ -1,6 +1,9 @@
 <?xml version="1.0"?>
 <!-- ros2_control in Gazebo: each steering joint takes a position command,
-     each wheel joint a velocity command. The suspension stays passive. -->
+     each wheel joint a velocity command. The suspension stays passive: its joints only
+     report where they are (on /joint_states, so that robot_state_publisher can place the
+     legs and wheels, e.g. in RViz); joints without a command are left alone by
+     gz_ros2_control 0.7.2 and later. -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <xacro:macro name="steer_joint_interface" params="prefix">
@@ -19,6 +22,13 @@
     </joint>
   </xacro:macro>
 
+  <xacro:macro name="suspension_joint_interface" params="prefix">
+    <joint name="${prefix}_suspension_joint">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </xacro:macro>
+
   <xacro:macro name="gazebo_control" params="controllers_file">
     <ros2_control name="GazeboSimSystem" type="system">
       <hardware>
@@ -32,6 +42,10 @@
       <xacro:wheel_joint_interface prefix="front_right"/>
       <xacro:wheel_joint_interface prefix="rear_left"/>
       <xacro:wheel_joint_interface prefix="rear_right"/>
+      <xacro:suspension_joint_interface prefix="front_left"/>
+      <xacro:suspension_joint_interface prefix="front_right"/>
+      <xacro:suspension_joint_interface prefix="rear_left"/>
+      <xacro:suspension_joint_interface prefix="rear_right"/>
     </ros2_control>
 
     <!-- The Gazebo plugin that runs ros2_control inside the simulation -->
