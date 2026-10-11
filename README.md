@@ -21,8 +21,10 @@ rows on real terrain. ROS 2 Humble and Gazebo Fortress.
 - Terrain generator: test terrains and the real MuST-C field from drone elevation data
 - Field: the 80 plots of the real MuST-C trial from its official shapefile, with
   generated crop plants (textured leaves, about 22,500 plants)
-- Localization: own EKF fusing RTK GNSS (two antennas: position and heading), IMU
-  and wheel odometry
+- Localization: own EKF fusing RTK GNSS (two antennas: position and heading), IMU,
+  wheel odometry and the crop rows measured in the 3D LiDAR; the pose also goes out as TF
+- 3D LiDAR on a mast: the mission stands still while an obstacle is in its way, and the
+  rows node measures the robot's place across the crop rows
 - Autonomous coverage mission: passes over every plot, driven without turning
   (four-wheel steering: forwards, backwards and sideways), with steer-first driving
   and recovery from steering stalls
@@ -37,11 +39,52 @@ rows on real terrain. ROS 2 Humble and Gazebo Fortress.
   a coloured mesh of the plants, its leaf points a median 1.9 mm from the true leaves (the
   depth is simulated exactly; see the [plant map](docs/plant_map.md))
 
-First whole-field run (baseline, all 80 plots, 4.2 km): 643 of 643 segments in 2.85 h
-of simulated time; localization error 1.9 cm mean; wheels crushed plants on 32.5 % of
-their travel inside plots, 92 % of that in the dense cereal and mixture plots.
+## Results: the whole field
 
-Next: the final whole-field run with everything.
+The final run drove the coverage mission over all 80 plots with everything on: the C++
+driver, the 3D LiDAR (obstacle stop and crop rows), both line scanners, the 4 top dome
+cameras colouring the 3D points and the plant map; Gazebo without its window
+(`gui:=false`).
+
+| | Final run |
+|---|---|
+| Segments | 675 of 675 (4.09 km driven, 4.03 km planned) |
+| Simulated time | 3.25 h, of which 0.58 h false obstacle stops (see Limitations) |
+| Wall-clock time | 4.7 h (real-time factor 0.69) |
+| Robot centre to the planned line, mean / 95 % | 1.2 / 4.0 cm |
+| Localization error, mean / 95 % | 1.3 / 2.5 cm; across the rows 0.8 / 1.9 cm; the uncertainty it reports fits ((error/sigma)² 2.0, about 2 expected) |
+| Crop rows found in the LiDAR | the right row in 100 % of 37,662 scans (potato, soybean, sugar beet, sugar corn) |
+| Wheels crushing plants | 28.7 % of the wheel travel in plots, all but 1.9 m in the drilled cereals and mixtures (no gap between rows for a wheel; 11.7 % of their area flattened); none in potato, sugar beet and sugar corn |
+| Plant map against the generated plants | 80 plots, 70 % of each seen; cover within -9 to +7 points, canopy height within -2.8 to +6.0 cm ([plant map](docs/plant_map.md)) |
+| 3D point clouds | 80 plots (235 MB of PLY), coloured from 93,489 dome pictures |
+
+The first whole-field run, with an earlier version of the software, took 2.85 h of
+simulated time for 643 segments, with 1.9 cm mean localization error and plants
+crushed on 32.5 % of the wheel travel in plots.
+
+![The final run: the wheel tracks over the aerial photo (red: crushing plants, yellow: under leaves between the rows)](docs/images/final_run.jpg)
+
+## Limitations
+
+- The plants are generated, not measured: shapes, sizes and row spacings are assumed.
+  Cereal rows are picture strips, so their height reads 3-6 cm high.
+- The line scanners take 10 profiles per second (the real ones 200), 5 cm apart along the
+  rows: about half of the leaves' top surface has a point within 2 cm. More profiles
+  overload the simulation on the GTX 1650 used here.
+- The dome cameras give 640 x 480 pictures (the real ones 45 megapixels) of plants in the
+  roof's shade (the LED panels give no light). The 3D reconstruction uses Gazebo's exact
+  depth images instead of matching the pictures, and covers one stop.
+- In the final run the robot stopped 40 times (2,070 s) for obstacles that were not there:
+  Gazebo's LiDAR returns one beam, straight behind the robot at the seam of its view, about
+  30 cm too far. That point lies below the ground, and measured from it the tallest sweet
+  corn stood 1 m high while the robot drove backwards. The obstacle stop now ignores a single
+  stray point; plot 172 drives through without a stop since (the whole field has not been
+  run again).
+- The published pose sometimes jumps for one or two samples (61 times in 3.25 h, up to 15 cm
+  for 20 ms) and comes back; without these the largest error was 6.2 cm. The cause is not
+  found yet.
+- GNSS errors, wheel slip and soil are simulated models; the field run had RTK fixed GNSS
+  throughout.
 
 ## Quick start
 

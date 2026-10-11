@@ -47,6 +47,25 @@ above the plane of the wheels (median per plot and scanner -0.1 to +1.5 cm, meas
 profiles). Wheat reads highest: its rows are picture strips whose top edge stands above the
 drawn ears, and the scanners see the whole strip (below).
 
+### The whole field
+
+The final whole-field run (README) mapped all 80 plots, placed live with the robot's own
+pose estimate; the map against the true canopy, per crop (mean over its plots):
+
+| Crop | Plots | Seen | Cover: truth / map | Canopy height: map minus truth |
+|---|---|---|---|---|
+| Potato | 16 | 71 % | 80 % / 85 % | +1.0 cm (+0.6 to +1.5) |
+| Sugar beet | 16 | 72 % | 89 % / 95 % | +1.5 cm (+1.0 to +2.5) |
+| Sugar corn | 16 | 74 % | 75 % / 67 % | -2.0 cm (-2.8 to -1.4) |
+| Soybean | 8 | 75 % | 59 % / 59 % | +1.9 cm (+1.7 to +2.1) |
+| Summer wheat | 16 | 63 % | 98 % / 98 % | +4.6 cm (+3.2 to +5.6) |
+| Mixtures (faba, faba-wheat, wheat) | 8 | 61-66 % | 97-98 % / 98 % | +3.6 to +5.9 cm |
+
+Over all 80 plots cover is within -9 to +7 points of the truth and canopy height within
+-2.8 to +6.0 cm (mean size of the difference 3.9 points and 2.5 cm). Sugar corn is the
+only crop whose cover reads low (-7 to -9 points), probably because its long, narrow leaves
+fall between profiles 5 cm apart.
+
 ### Why the leaves are shaped in the mesh
 
 Gazebo's GPU lidar ignores the textures' transparency and the back sides of faces; the
