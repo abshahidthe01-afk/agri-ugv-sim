@@ -3,7 +3,7 @@
 from launch import LaunchDescription
 from launch.actions import (AppendEnvironmentVariable, DeclareLaunchArgument,
                             IncludeLaunchDescription)
-from launch.conditions import LaunchConfigurationEquals
+from launch.conditions import IfCondition, LaunchConfigurationEquals, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -69,6 +69,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'camera_rate', default_value='2', description='Pictures per second of each camera'),
         DeclareLaunchArgument(
+            'gui', default_value='true', choices=['true', 'false'],
+            description='false: Gazebo without its window (the sensors still render; '
+                        'faster, e.g. for long runs)'),
+        DeclareLaunchArgument(
             'camera_depth', default_value='false', choices=['true', 'false'],
             description='true: the dome cameras also measure depth (RGB-D, for 3D '
                         'reconstruction; costs more rendering time)'),
@@ -88,11 +92,13 @@ def generate_launch_description():
         AppendEnvironmentVariable(
             'IGN_GAZEBO_RESOURCE_PATH', PathJoinSubstitution([share, 'models'])),
 
-        # Gazebo itself (-r: start running immediately)
-        IncludeLaunchDescription(
+        # Gazebo itself (-r: start running immediately; -s: the server only, no window)
+        *[IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution(
                 [FindPackageShare('ros_gz_sim'), 'launch', 'gz_sim.launch.py'])),
-            launch_arguments={'gz_args': ['-r ', world_file]}.items()),
+            launch_arguments={'gz_args': [flags, world_file]}.items(), condition=condition)
+          for flags, condition in (('-r ', IfCondition(LaunchConfiguration('gui'))),
+                                   ('-r -s ', UnlessCondition(LaunchConfiguration('gui'))))],
 
         # The robot model (with ros2_control) on /robot_description, on simulation time
         Node(package='robot_state_publisher', executable='robot_state_publisher',

@@ -11,6 +11,7 @@ cameras: none (default), top (the 4 dome cameras of the top ring) or all 20 take
 camera_rate: their pictures per second (default 2); camera_depth: true to have them measure
 depth too (RGB-D, for 3D reconstruction; default false).
 controller: cpp (default) or python, the four-wheel-steering driver (see sim.launch.py).
+gui: true (default) or false, Gazebo with or without its window.
 The robot is placed where the mission begins, facing along the crop rows; the mission
 node then waits for /mission/start (std_srvs/Trigger). The rows node measures the robot's
 place across the crop rows in the LiDAR scans (/rows/measurement).
@@ -61,6 +62,7 @@ def mission(context):
                               'camera_rate': LaunchConfiguration('camera_rate'),
                               'camera_depth': LaunchConfiguration('camera_depth'),
                               'controller': LaunchConfiguration('controller'),
+                              'gui': LaunchConfiguration('gui'),
                               'x': f'{x:.3f}', 'y': f'{y:.3f}', 'z': f'{z:.3f}',
                               'yaw': f'{yaw:.5f}'}.items()),
         Node(package='agri_ugv_navigation', executable='mission', output='screen',
@@ -90,5 +92,7 @@ def generate_launch_description():
                               description='true: the dome cameras also measure depth'),
         DeclareLaunchArgument('controller', default_value='cpp',
                               description='Four-wheel-steering driver: cpp or python'),
+        DeclareLaunchArgument('gui', default_value='true',
+                              description='false: Gazebo without its window'),
         OpaqueFunction(function=mission),
     ])

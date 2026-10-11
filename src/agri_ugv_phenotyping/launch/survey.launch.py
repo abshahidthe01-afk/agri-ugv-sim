@@ -31,6 +31,7 @@ MISSION_ARGUMENTS = [
     ('camera_rate', '2', 'Pictures per second of each camera'),
     ('camera_depth', 'false', 'true: the dome cameras also measure depth'),
     ('controller', 'cpp', 'Four-wheel-steering driver: cpp or python'),
+    ('gui', 'true', 'false: Gazebo without its window'),
 ]
 
 
