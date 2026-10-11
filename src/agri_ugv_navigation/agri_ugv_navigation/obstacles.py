@@ -61,12 +61,15 @@ def obstacle_gap(points, direction, reach=3.0, height=1.0, hidden=2.8, near_heig
     under the robot); direction is the way the robot moves (x, y). The robot's footprint,
     widened by 'margin' on both sides, sweeps a strip in that direction; only obstacles
     within 'reach' of its edge count. A point is part of an obstacle if it stands 'height'
-    above the lowest point in its neighbourhood (cells of 'cell' metres and the eight around
-    them: the ground, or the crop's top in a dense crop). Closer than 'hidden' to the robot's
-    centre the LiDAR cannot see the ground: there a point must be 'near_height' above the
-    ground under the robot. At least 'min_points' points make an obstacle. Points within
-    'own' of the robot's outline belong to the robot itself (the rolled-up curtains reach
-    1 cm beyond the tyres) or are under it, and are left out.
+    above the ground of its neighbourhood (cells of 'cell' metres and the eight around them:
+    the ground, or the crop's top in a dense crop), the lowest of the cells' grounds. A
+    cell's ground is its 'min_points'-th lowest point, so that a single stray return below
+    the ground cannot make the tallest crop stand out (Gazebo's LiDAR gives one straight
+    behind the robot, at the seam of its view, about 30 cm too far). Closer than 'hidden'
+    to the robot's centre the LiDAR cannot see the ground: there a point must be
+    'near_height' above the ground under the robot. At least 'min_points' points make an
+    obstacle. Points within 'own' of the robot's outline belong to the robot itself (the
+    rolled-up curtains reach 1 cm beyond the tyres) or are under it, and are left out.
     """
     d = np.asarray(direction, dtype=float)
     if np.hypot(*d) < 1e-9:
@@ -86,7 +89,13 @@ def obstacle_gap(points, direction, reach=3.0, height=1.0, hidden=2.8, near_heig
     i = np.floor((s - (front - cell)) / cell).astype(int) + 1        # +1: a border of cells
     j = np.floor((lateral + side + cell) / cell).astype(int) + 1
     lowest = np.full((i.max() + 2, j.max() + 2), np.inf)
-    np.minimum.at(lowest, (i, j), z)
+    order = np.lexsort((z, j, i))                      # by cell, then from the lowest up
+    ci, cj, cz = i[order], j[order], z[order]
+    first = np.ones(len(cz), dtype=bool)
+    first[1:] = (ci[1:] != ci[:-1]) | (cj[1:] != cj[:-1])
+    starts = np.maximum.accumulate(np.where(first, np.arange(len(cz)), 0))
+    pick = np.arange(len(cz)) - starts == min_points - 1     # each cell's k-th lowest
+    lowest[ci[pick], cj[pick]] = cz[pick]
     padded = np.pad(lowest, 1, constant_values=np.inf)
     ground = np.min([padded[1 + a:padded.shape[0] - 1 + a, 1 + b:padded.shape[1] - 1 + b]
                      for a in (-1, 0, 1) for b in (-1, 0, 1)], axis=0)[i, j]

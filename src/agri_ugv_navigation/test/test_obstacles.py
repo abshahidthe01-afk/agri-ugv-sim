@@ -85,6 +85,16 @@ def test_in_a_dense_crop_the_canopy_is_the_ground():
     assert obstacle_gap(tall, (1.0, 0.0)) == pytest.approx(4.0 - 0.25 - 0.76, abs=0.02)
 
 
+def test_one_stray_return_below_the_ground_does_not_make_the_corn_an_obstacle():
+    corn = crop_rows(top=0.88)                          # the tallest corn plants: 0.89 m
+    stray = np.array([[-2.84, 0.0, -0.13]])     # straight behind, 45 deg down, 13 cm too low
+    points = scene(corn, stray)
+    assert len(points) == len(scene(corn)) + 1          # the LiDAR can see it there
+    assert obstacle_gap(points, (-1.0, 0.0)) is None
+    with_person = scene(corn, stray, person(-3.5, 0.0))
+    assert obstacle_gap(with_person, (-1.0, 0.0)) == pytest.approx(2.49, abs=0.02)
+
+
 def test_the_lidar_mount_follows_the_joints():
     urdf = ('<robot name="r"><link name="base_footprint"/><link name="base_link"/>'
             '<link name="lidar_link"/>'
