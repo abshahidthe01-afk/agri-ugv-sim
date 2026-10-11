@@ -18,13 +18,16 @@ setup(
     zip_safe=True,
     maintainer='Abdullah Bin Shahid',
     maintainer_email='abshahidthe01@gmail.com',
-    description='Phenotyping: a plant map of every plot from the laser line scanners.',
+    description='Phenotyping: a plant map of every plot from the laser line scanners, '
+                '3D reconstruction from the dome cameras.',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'canopy_truth = agri_ugv_phenotyping.truth:main',
+            'capture_depth = agri_ugv_phenotyping.capture:main',
             'plant_map = agri_ugv_phenotyping.plant_map_node:main',
+            'reconstruct = agri_ugv_phenotyping.reconstruct:main',
         ],
     },
 )
