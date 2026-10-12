@@ -2,7 +2,7 @@
 
 import math
 
-from agri_ugv_field.plants import CROPS, plot_frame, row_offsets
+from agri_ugv_field.plants import CROPS, plot_frame, sown_rows
 import numpy as np
 
 STEM_RADIUS = 0.03      # [m] around a row line the tyre runs over the stems: plants crushed
@@ -12,9 +12,9 @@ class CropMap:
     """
     The crop rows of a field: tells whether a tyre at a ground point hits plants.
 
-    Rows are lines along each plot's long side, placed exactly like the generated plants;
-    a row's leaves spread half the crop's width to each side. Dense crops (cereals) fill
-    the whole plot. Gaps between plants within a row are ignored (leaves overlap).
+    Rows are lines along each plot's long side, placed exactly like the generated plants
+    (in cereals every 12.5 cm, but none on the tramlines); a row's leaves spread half the
+    crop's width to each side. Gaps between plants within a row are ignored (leaves overlap).
     """
 
     def __init__(self, plots):
@@ -23,11 +23,10 @@ class CropMap:
         for plot in plots:
             crop = CROPS[plot['crop']]
             centre, along, across = plot_frame(plot)
-            dense = crop['shape'] == 'cereal'
-            rows = np.array([]) if dense else row_offsets(plot['width'], crop['rows'])
+            rows = sown_rows(plot['width'], crop)
             reach = math.hypot(plot['length'], plot['width']) / 2 + 0.5
             self.plots.append((plot['plot_id'], centre, along, across, plot['length'] / 2,
-                               plot['width'] / 2, rows, crop['width'] / 2, dense, reach))
+                               plot['width'] / 2, rows, crop['width'] / 2, reach))
 
     def contact(self, x, y, tyre_half):
         """
@@ -36,16 +35,14 @@ class CropMap:
         tyre_half is half the tyre width; the tyre runs along the rows or crosses them.
         """
         point = np.array([x, y])
-        for plot_id, centre, along, across, half_length, half_width, rows, canopy, dense, \
-                reach in self.plots:
+        for plot_id, centre, along, across, half_length, half_width, rows, canopy, reach in \
+                self.plots:
             d = point - centre
             if abs(d[0]) > reach or abs(d[1]) > reach:
                 continue
             a, b = d @ along, d @ across
             if abs(a) > half_length or abs(b) > half_width + tyre_half:
                 continue
-            if dense:
-                return plot_id, True, True
             nearest = float(np.min(np.abs(rows - b)))
             return plot_id, nearest < tyre_half + STEM_RADIUS, nearest < tyre_half + canopy
         return None, False, False

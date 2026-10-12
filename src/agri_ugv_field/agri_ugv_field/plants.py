@@ -2,12 +2,14 @@
 
 import math
 
+from agri_ugv_field.tramlines import tramline_rows
 import numpy as np
 
 # Assumed typical values for late June (crops 6-9 weeks old), not measured: the MuST-C files
 # give no row spacings. Spacings and sizes in metres; 'plant' = distance between plants (or
 # leaf clumps) in a row; 'width' is the typical leaf spread that the leaf angles in plant()
-# produce. 'cereal' crops are drawn as one picture strip per row plus a canopy.
+# produce. 'cereal' crops are drawn as one picture strip per row plus a canopy; 'tramlines':
+# the rows where the robot's wheels run are not sown (tramlines.py).
 CROPS = {
     'Sugar Beet': {'key': 'sugar_beet', 'rows': 0.50, 'plant': 0.20, 'shape': 'rosette',
                    'height': 0.30, 'width': 0.40},
@@ -18,7 +20,7 @@ CROPS = {
     'Soybean': {'key': 'soybean', 'rows': 0.45, 'plant': 0.12, 'shape': 'soy',
                 'height': 0.30, 'width': 0.30},
     'Summerwheat': {'key': 'wheat', 'rows': 0.125, 'plant': None, 'shape': 'cereal',
-                    'height': 0.70, 'width': 0.08},
+                    'height': 0.70, 'width': 0.08, 'tramlines': True},
 }
 for _name in ['Mixture (faba-wheat)', 'Mixture (faba)', 'Mixture (wheat)']:
     CROPS[_name] = {**CROPS['Summerwheat'], 'key': 'mixtures'}
@@ -40,6 +42,26 @@ def row_offsets(width, spacing):
         raise ValueError(f'width and spacing must be positive, got {width}, {spacing}')
     n = int(round(width / spacing))
     return (np.arange(n) - (n - 1) / 2) * spacing
+
+
+def sown(width, crop):
+    """Return a mask of a crop's rows (row_offsets) that are sown: all but the tramlines."""
+    rows = row_offsets(width, crop['rows'])
+    if crop.get('tramlines'):
+        return ~tramline_rows(rows, width)
+    return np.ones(len(rows), dtype=bool)
+
+
+def sown_rows(width, crop):
+    """Return the across-plot offsets of the rows sown in a plot 'width' metres wide."""
+    return row_offsets(width, crop['rows'])[sown(width, crop)]
+
+
+def row_groups(rows, spacing):
+    """Return (first, last) offsets of each run of rows 'spacing' apart, between tramlines."""
+    rows = np.sort(np.asarray(rows, dtype=float))
+    breaks = np.nonzero(np.diff(rows) > 1.5 * spacing)[0]
+    return list(zip(rows[np.r_[0, breaks + 1]], rows[np.r_[breaks, len(rows) - 1]]))
 
 
 def plant_offsets(length, spacing, rng, jitter=0.02, missing=0.05):
@@ -233,9 +255,10 @@ def plot_mesh(plot, crop, ground, rng, margin=0.05, outline=None):
     Return ({part: (vertices, uvs, faces)}, count) of all plants in one plot, world metres.
 
     ground(x, y) gives the terrain height. Rows run along the plot's long side. count is the
-    number of plants (or leaf clumps), or of row strips for cereals. Parts are named as in
-    PARTS: '' for single plants, '_rows' and '_canopy' for cereals. outline shapes the
-    single plants' leaves (plant). Every face is there twice, once facing each way (two_sided).
+    number of plants (or leaf clumps), or of row strips for cereals; their tramlines stay bare
+    (no strip, no canopy). Parts are named as in PARTS: '' for single plants, '_rows' and
+    '_canopy' for cereals. outline shapes the single plants' leaves (plant). Every face is
+    there twice, once facing each way (two_sided).
     """
     centre, u, v = plot_frame(plot)
     rows = row_offsets(plot['width'], crop['rows'])
@@ -252,19 +275,36 @@ def plot_mesh(plot, crop, ground, rng, margin=0.05, outline=None):
         return {'': two_sided(merge(parts))}, len(parts)
     half = plot['length'] / 2 - margin
     stations = np.linspace(-half, half, int(math.ceil(2 * half)) + 1)    # at most 1 m apart
-    strips = [row_strip([centre + a * u + b * v for a in stations],
-                        crop['height'] * rng.uniform(0.9, 1.05), ground, rng.uniform(0, 1))
-              for b in rows]
-    across = np.linspace(rows[0], rows[-1], int(math.ceil(rows[-1] - rows[0])) + 1)
-    grid = np.array([centre + a * u + b * v for a in stations for b in across])
-    top = ground(grid[:, 0], grid[:, 1]) + 0.9 * crop['height']
-    uvs = np.array([(a - stations[0], b - across[0]) for a in stations for b in across])
-    m = len(across)
-    k = np.array([i * m + j for i in range(len(stations) - 1) for j in range(m - 1)])
+    # every row draws its height and texture offset, sown or not: the tramlines leave all
+    # other plants of the field as they would be without them
+    looks = [(crop['height'] * rng.uniform(0.9, 1.05), rng.uniform(0, 1)) for _ in rows]
+    keep = sown(plot['width'], crop)
+    strips = [row_strip([centre + a * u + b * v for a in stations], height, ground, u_offset)
+              for b, (height, u_offset), kept in zip(rows, looks, keep) if kept]
+    canopies = [canopy_sheet(centre, u, v, stations, (first, last), ground,
+                             0.9 * crop['height'])
+                for first, last in row_groups(rows[keep], crop['rows'])]
+    return {'_rows': two_sided(merge(strips)), '_canopy': two_sided(merge(canopies))}, \
+        len(strips)
+
+
+def canopy_sheet(centre, along, across, stations, span, ground, height):
+    """
+    Return (vertices, uvs, faces) of a cereal canopy: a sheet 'height' above the ground.
+
+    It reaches over the rows from span[0] to span[1] (offsets across the plot), at the
+    'stations' along it; centre, along and across as from plot_frame.
+    """
+    offsets = np.linspace(span[0], span[1], int(math.ceil(span[1] - span[0])) + 1)
+    grid = np.array([centre + a * along + b * across for a in stations for b in offsets])
+    top = ground(grid[:, 0], grid[:, 1]) + height
+    uvs = np.array([(a - stations[0], b - offsets[0]) for a in stations for b in offsets])
+    m = len(offsets)
+    k = np.array([i * m + j for i in range(len(stations) - 1) for j in range(m - 1)],
+                 dtype=int)
     faces = np.concatenate([np.column_stack([k, k + m, k + m + 1]),
                             np.column_stack([k, k + m + 1, k + 1])])
-    canopy = (np.column_stack([grid, top]), uvs, faces)
-    return {'_rows': two_sided(merge(strips)), '_canopy': two_sided(canopy)}, len(strips)
+    return np.column_stack([grid, top]), uvs, faces
 
 
 def grow(plots, ground, seed=1, outlines=None):

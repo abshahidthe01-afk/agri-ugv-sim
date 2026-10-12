@@ -37,9 +37,13 @@ def test_crossing_the_rows_crushes_one_tyre_plus_stem_zone_per_row():
     assert totals['w']['crushed'] == pytest.approx(12 * (TYRE + 2 * STEM_RADIUS), abs=0.02)
 
 
-def test_any_wheel_in_wheat_crushes_and_outside_plots_nothing_happens():
-    totals, _ = damage(straight(10.0, -6.0, 6.0), ONE_WHEEL, CropMap([BEET, WHEAT]), TYRE)
-    assert totals['w']['crushed'] == pytest.approx(8.0, abs=0.05)
+def test_in_wheat_a_wheel_crushes_except_on_a_tramline_and_outside_plots_nothing_happens():
+    totals, _ = damage(straight(10.75, -6.0, 6.0), ONE_WHEEL, CropMap([BEET, WHEAT]), TYRE)
+    assert totals['w']['crushed'] == pytest.approx(8.0, abs=0.05)    # between the tramlines
+    for x in (8.5, 10.0, 11.5):                # the plot's middle and 1.5 m off: tramlines
+        totals, _ = damage(straight(x, -6.0, 6.0), ONE_WHEEL, CropMap([BEET, WHEAT]), TYRE)
+        assert totals['w']['in_plots'] == pytest.approx(8.0, abs=0.05)
+        assert totals['w']['crushed'] == 0.0 and totals['w']['leaves'] == 0.0
     totals, _ = damage(straight(5.0, -6.0, 6.0), ONE_WHEEL, CropMap([BEET, WHEAT]), TYRE)
     assert totals['w'] == {'in_plots': 0.0, 'leaves': 0.0, 'crushed': 0.0}
 

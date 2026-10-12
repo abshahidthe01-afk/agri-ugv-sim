@@ -20,7 +20,8 @@ rows on real terrain. ROS 2 Humble and Gazebo Fortress.
 - Ground-truth pose and velocity from Gazebo
 - Terrain generator: test terrains and the real MuST-C field from drone elevation data
 - Field: the 80 plots of the real MuST-C trial from its official shapefile, with
-  generated crop plants (textured leaves, about 22,500 plants)
+  generated crop plants (textured leaves, about 22,500 plants); the drilled cereals have
+  tramlines, unsown rows where the robot's wheels run
 - Localization: own EKF fusing RTK GNSS (two antennas: position and heading), IMU,
   wheel odometry and the crop rows measured in the 3D LiDAR; the pose also goes out as TF
 - 3D LiDAR on a mast: the mission stands still while an obstacle is in its way, and the

@@ -4,8 +4,9 @@ import math
 
 from agri_ugv_field.plants import (CROPS, grow, leaf_outline, leaves, merge, obj_text, PARTS,
                                    plant, plant_offsets, plot_mesh, row_offsets, row_strip,
-                                   two_sided, vertex_normals)
+                                   sown, two_sided, vertex_normals)
 from agri_ugv_field.textures import TEXTURES
+from agri_ugv_field.tramlines import wheel_lines
 import numpy as np
 import pytest
 
@@ -89,15 +90,31 @@ def test_single_plants_stand_in_rows_inside_the_plot():
     assert vertices[:, 2].min() == pytest.approx(0.5)
 
 
-def test_cereals_get_one_strip_per_row_and_a_canopy_inside_the_plot():
+def test_cereals_get_one_strip_per_sown_row_and_a_canopy_inside_the_plot():
     meshes, count = plot_mesh(PLOT, CROPS['Summerwheat'], flat, np.random.default_rng(1))
-    assert sorted(meshes) == ['_canopy', '_rows'] and count == 48
+    assert sorted(meshes) == ['_canopy', '_rows'] and count == 40     # 48 rows, 8 on tramlines
+    lines = np.array(wheel_lines(PLOT['width']))
     for vertices, _, _ in meshes.values():
         along, across = plot_coordinates(vertices)
         assert np.abs(along).max() == pytest.approx(7.7 / 2 - 0.05)
-        assert np.abs(across).max() == pytest.approx(2.9375)
+        assert np.abs(across).max() == pytest.approx(2.8125)
+        # nothing over the tramlines: the nearest strip or canopy edge 18.75 cm from a wheel
+        assert np.min(np.abs(across[:, None] - lines[None, :])) == pytest.approx(0.1875)
     assert meshes['_canopy'][0][:, 2] == pytest.approx(np.full(len(meshes['_canopy'][0]),
                                                                0.5 + 0.9 * 0.7))
+
+
+def test_tramlines_leave_the_other_rows_and_the_next_plants_as_they_were():
+    without = dict(CROPS['Summerwheat'], tramlines=False)
+    a, b = np.random.default_rng(1), np.random.default_rng(1)
+    meshes, count = plot_mesh(PLOT, CROPS['Summerwheat'], flat, a)
+    plain, plain_count = plot_mesh(PLOT, without, flat, b)
+    assert (count, plain_count) == (40, 48)
+    assert a.random() == b.random()             # the rest of the field grows the same plants
+    strips = meshes['_rows'][0][:len(meshes['_rows'][0]) // 2]           # one side of each
+    plain_strips = plain['_rows'][0][:len(plain['_rows'][0]) // 2].reshape(48, -1, 3)
+    assert np.array_equal(strips, plain_strips[sown(6.0, CROPS['Summerwheat'])].reshape(-1, 3))
+    assert len(plain['_canopy'][0]) < len(meshes['_canopy'][0])          # one sheet, not 4
 
 
 def test_every_crop_shape_has_textures_that_exist():

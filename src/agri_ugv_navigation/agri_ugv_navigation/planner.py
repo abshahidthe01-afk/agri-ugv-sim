@@ -7,20 +7,19 @@ in the lane at the plot's end. Plot rows are served from their wider neighbourin
 and taken in a serpentine; changing plot rows goes around the end of the plot block.
 In the lanes the tyres keep a clearance from the plot ends where there is room for it;
 where a lane is narrower, the robot moves in its middle, measured at each plot's end.
-In row crops the passes are placed so that the wheels run between the crop rows.
+In row crops the passes are placed so that the wheels run between the crop rows; in cereals
+they are spread evenly, and the wheels run on the tramlines sown for them.
 """
 
 import math
 
 from agri_ugv_field.plants import CROPS, row_offsets
+from agri_ugv_field.tramlines import even_offsets, pass_offsets, WHEEL_TO_ROW
 import numpy as np
 
 ROBOT_HALF_WIDTH = 0.84       # [m] wheel centre to the outer tyre edge, plus a little
 ROBOT_HALF_LENGTH = 0.76      # [m] centre to the tyre edge along the rows (tyres steered across)
 ROW_GAP = 3.0                 # [m] plot centres further apart across the field: next plot row
-# [m] least distance from a wheel's centre to a crop row: half a tyre (0.0825), the stems
-# (0.03) and 3 cm for steering errors
-WHEEL_TO_ROW = 0.14
 
 
 def field_frame(boundary):
@@ -141,26 +140,6 @@ def lane_stop(plot, offsets, side, field, clearance):
                                f'at the end of plot {plot["plot_id"]}')
 
 
-def even_offsets(width, n, track=1.5):
-    """Return n pass centre lines spread evenly, the outer wheels on the plot's edges."""
-    if n == 1:
-        return [0.0]
-    edge = (width - track) / 2
-    return sorted(-edge + k * 2 * edge / (n - 1) for k in range(n))
-
-
-def pass_offsets(width, track=1.5, slack=0.05):
-    """
-    Return evenly spaced pass centre lines across a plot (the simple, row-blind way).
-
-    As many passes as needed to cover the width with the track, allowing 'slack' metres
-    left over (plots measure 5.98-6.02 m: a 2 cm sliver is not worth a fifth pass), and an
-    even number of them, so that the robot leaves every plot into the lane it came from.
-    """
-    n = max(1, math.ceil((width - slack) / track))
-    return even_offsets(width, n + n % 2, track)
-
-
 def wheel_room(offset, rows, track=1.5):
     """Return how far the nearer of a pass's two wheels runs from the closest crop row."""
     wheels = np.array([offset - track / 2, offset + track / 2])
@@ -212,7 +191,9 @@ def plot_offsets(plot, track=1.5, slack=0.05):
     """
     Return a plot's pass centre lines: evenly spaced in cereals, else between the crop rows.
 
-    The rows are taken as sown, in the pattern of the generated plants (agri_ugv_field.plants).
+    The rows are taken as sown, in the pattern of the generated plants (agri_ugv_field.plants);
+    the cereals' tramlines lie under the wheels of these even passes (with the robot's track,
+    agri_ugv_field.tramlines.TRACK).
     """
     crop = CROPS.get(plot['crop'])
     if crop is None or crop['shape'] == 'cereal':

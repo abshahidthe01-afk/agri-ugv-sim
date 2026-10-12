@@ -2,7 +2,8 @@
 
 import math
 
-from agri_ugv_field.plants import row_offsets
+from agri_ugv_field.plants import CROPS, row_offsets, sown_rows
+from agri_ugv_field.tramlines import WHEEL_TO_ROW
 from agri_ugv_navigation.follower import follow
 from agri_ugv_navigation.planner import (covers, field_frame, lane_widths, pass_offsets,
                                          plan_mission, plot_offsets, plot_rows,
@@ -61,6 +62,15 @@ def test_wheels_run_between_the_rows_of_row_crops():
     for crop in ('Sugar Beet', 'Potato'):          # rows 0.5 and 0.75 m apart: already clear
         assert plot_offsets({'crop': crop, 'width': 6.0}) == pytest.approx(pass_offsets(6.0))
     assert plot_offsets({'crop': 'Summerwheat', 'width': 6.02}) == pass_offsets(6.02)
+
+
+@pytest.mark.parametrize('width', [5.979, 6.0, 6.02])
+@pytest.mark.parametrize('crop', ['Summerwheat', 'Mixture (faba-wheat)'])
+def test_in_cereals_the_wheels_run_on_the_tramlines(crop, width):
+    offsets = plot_offsets({'crop': crop, 'width': width})
+    rows = sown_rows(width, CROPS[crop])
+    assert len(rows) == 40 and covers(offsets, width)
+    assert min(wheel_room(o, rows) for o in offsets) >= WHEEL_TO_ROW
 
 
 def test_rows_too_close_for_the_wheels_still_give_covering_passes():
