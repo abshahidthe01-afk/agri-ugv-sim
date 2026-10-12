@@ -54,15 +54,15 @@ pose estimate; the map against the true canopy, per crop (mean over its plots):
 
 | Crop | Plots | Seen | Cover: truth / map | Canopy height: map minus truth |
 |---|---|---|---|---|
-| Potato | 16 | 71 % | 80 % / 85 % | +1.0 cm (+0.6 to +1.5) |
-| Sugar beet | 16 | 72 % | 89 % / 95 % | +1.5 cm (+1.0 to +2.5) |
-| Sugar corn | 16 | 74 % | 75 % / 67 % | -2.0 cm (-2.8 to -1.4) |
+| Potato | 16 | 72 % | 80 % / 85 % | +1.1 cm (+0.6 to +1.5) |
+| Sugar beet | 16 | 72 % | 89 % / 95 % | +1.5 cm (+0.9 to +2.6) |
+| Sugar corn | 16 | 74 % | 75 % / 67 % | -2.0 cm (-3.0 to -1.4) |
 | Soybean | 8 | 75 % | 59 % / 59 % | +1.9 cm (+1.7 to +2.1) |
-| Summer wheat | 16 | 63 % | 98 % / 98 % | +4.6 cm (+3.2 to +5.6) |
-| Mixtures (faba, faba-wheat, wheat) | 8 | 61-66 % | 97-98 % / 98 % | +3.6 to +5.9 cm |
+| Summer wheat | 16 | 59 % | 97 % / 98 % | +4.8 cm (+3.4 to +5.5) |
+| Mixtures (faba, faba-wheat, wheat) | 8 | 55-61 % | 98 % / 97 % | +3.7 to +5.9 cm |
 
 Over all 80 plots cover is within -9 to +7 points of the truth and canopy height within
--2.8 to +6.0 cm (mean size of the difference 3.9 points and 2.5 cm). Sugar corn is the
+-3.0 to +6.0 cm (mean size of the difference 4.0 points and 2.5 cm). Sugar corn is the
 only crop whose cover reads low (-7 to -9 points), probably because its long, narrow leaves
 fall between profiles 5 cm apart.
 
@@ -158,7 +158,8 @@ the points on leaves are also higher than 6 cm. In sugar beet, whose leaves stan
 the soil, the colour adds the model's colour rather than a better plant mask. The 4 cameras
 take the real-time factor from 0.64 to 0.49 (robot driving, scanners off); the plants lie in
 the roof's shade (mean brightness 37 of 255; the real robot lights them with LED panels and
-closes curtains), so the picture below shows the colours brightened.
+closes curtains), so the picture below shows the colours brightened. A whole-field survey,
+before the cereals had tramlines, coloured the clouds of all 80 plots from 93,489 pictures.
 
 ![Plot 198: the laser line scanners' 3D points, coloured by the dome cameras](images/plant_cloud_198.png)
 

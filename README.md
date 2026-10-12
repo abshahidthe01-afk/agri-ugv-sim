@@ -1,4 +1,4 @@
-# Agricultural UGV simulation (work in progress)
+# Agricultural UGV simulation
 
 [![CI](https://github.com/abshahidthe01-afk/agri-ugv-sim/actions/workflows/ci.yml/badge.svg)](https://github.com/abshahidthe01-afk/agri-ugv-sim/actions/workflows/ci.yml)
 
@@ -42,48 +42,53 @@ rows on real terrain. ROS 2 Humble and Gazebo Fortress.
 
 ## Results: the whole field
 
-The final run drove the coverage mission over all 80 plots with everything on: the C++
-driver, the 3D LiDAR (obstacle stop and crop rows), both line scanners, the 4 top dome
-cameras colouring the 3D points and the plant map; Gazebo without its window
-(`gui:=false`).
+The final run drove the coverage mission over all 80 plots, the cereals with their
+tramlines: the C++ driver, the 3D LiDAR (obstacle stop and crop rows), both line scanners
+and the plant map; Gazebo without its window (`gui:=false`).
 
 | | Final run |
 |---|---|
 | Segments | 675 of 675 (4.09 km driven, 4.03 km planned) |
-| Simulated time | 3.25 h, of which 0.58 h false obstacle stops (see Limitations) |
-| Wall-clock time | 4.7 h (real-time factor 0.69) |
-| Robot centre to the planned line, mean / 95 % | 1.2 / 4.0 cm |
-| Localization error, mean / 95 % | 1.3 / 2.5 cm; across the rows 0.8 / 1.9 cm; the uncertainty it reports fits ((error/sigma)² 2.0, about 2 expected) |
-| Crop rows found in the LiDAR | the right row in 100 % of 37,662 scans (potato, soybean, sugar beet, sugar corn) |
-| Wheels crushing plants | 28.7 % of the wheel travel in plots, all but 1.9 m in the drilled cereals and mixtures (no gap between rows for a wheel; 11.7 % of their area flattened); none in potato, sugar beet and sugar corn |
-| Plant map against the generated plants | 80 plots, 70 % of each seen; cover within -9 to +7 points, canopy height within -2.8 to +6.0 cm ([plant map](docs/plant_map.md)) |
-| 3D point clouds | 80 plots (235 MB of PLY), coloured from 93,489 dome pictures |
+| Simulated time | 2.69 h, of which 35 s short stops for late LiDAR scans (see Limitations) |
+| Wall-clock time | 4.1 h (real-time factor 0.65) |
+| Robot centre to the planned line, mean / 95 % | 1.2 / 4.2 cm |
+| Localization error, mean / 95 % | 1.3 / 2.6 cm; across the rows 0.8 / 2.0 cm; the uncertainty it reports fits ((error/sigma)² 1.9, about 2 expected) |
+| Crop rows found in the LiDAR | the right row in 100 % of 27,688 scans (potato, soybean, sugar beet, sugar corn) |
+| Wheels crushing plants | 0.03 % of the wheel travel in plots (2.85 of 10,454 m: soybean 2.44 m, summer wheat 0.42 m); in the cereals the wheels run on the tramlines (0.0 % of the crop flattened) |
+| Plant map against the generated plants | 80 plots, 69 % of each seen; cover within -9 to +7 points, canopy height within -3.0 to +6.0 cm ([plant map](docs/plant_map.md)) |
+| 3D point clouds | 80 plots (151 MB of PLY) |
 
+The run before the tramlines took 3.25 h of simulated time, 0.58 h of it in stops for
+obstacles that were not there (see Limitations), and its wheels crushed plants on 28.7 % of
+their travel in plots, nearly all in the drilled cereals (no gap between rows for a wheel).
 The first whole-field run, with an earlier version of the software, took 2.85 h of
 simulated time for 643 segments, with 1.9 cm mean localization error and plants
 crushed on 32.5 % of the wheel travel in plots.
 
-![The final run: the wheel tracks over the aerial photo (red: crushing plants, yellow: under leaves between the rows)](docs/images/final_run.jpg)
+![The final run: the wheel tracks over the aerial photo (yellow: under leaves between the rows, cyan: clear of the plants, as on the tramlines, red: crushing plants)](docs/images/final_run.jpg)
 
 ## Limitations
 
 - The plants are generated, not measured: shapes, sizes and row spacings are assumed.
   Cereal rows are picture strips, so their height reads 3-6 cm high.
+- The tramlines leave 8 of the 48 cereal rows unsown (17 %), because the robot passes every
+  1.5 m; on farms tramlines lie a sprayer's width apart and take a few percent of the field.
 - The line scanners take 10 profiles per second (the real ones 200), 5 cm apart along the
   rows: about half of the leaves' top surface has a point within 2 cm. More profiles
   overload the simulation on the GTX 1650 used here.
 - The dome cameras give 640 x 480 pictures (the real ones 45 megapixels) of plants in the
   roof's shade (the LED panels give no light). The 3D reconstruction uses Gazebo's exact
   depth images instead of matching the pictures, and covers one stop.
-- In the final run the robot stopped 40 times (2,070 s) for obstacles that were not there:
-  Gazebo's LiDAR returns one beam, straight behind the robot at the seam of its view, about
+- Gazebo's LiDAR returns one beam, straight behind the robot at the seam of its view, about
   30 cm too far. That point lies below the ground, and measured from it the tallest sweet
-  corn stood 1 m high while the robot drove backwards. The obstacle stop now ignores a single
-  stray point; plot 172 drives through without a stop since (the whole field has not been
-  run again).
-- The published pose sometimes jumps for one or two samples (61 times in 3.25 h, up to 15 cm
-  for 20 ms) and comes back; without these the largest error was 6.2 cm. The cause is not
-  found yet.
+  corn stood 1 m high: in the run before the final one the robot stopped 40 times (2,070 s)
+  for it while driving backwards. The obstacle stop now ignores a single stray point, and
+  the final run had no such stop.
+- The mission also stands still while no LiDAR scan has come for 0.5 s (a safety rule): in
+  the final run 31 times, about 1 s each (35 s in total), when scans came late.
+- The published pose sometimes jumps by a few centimetres for a moment, the larger jumps all
+  at 0.5 m/s between the plots: in the final run the largest error was 5.8 cm (15 cm in the
+  run before). The cause is not found yet.
 - GNSS errors, wheel slip and soil are simulated models; the field run had RTK fixed GNSS
   throughout.
 
