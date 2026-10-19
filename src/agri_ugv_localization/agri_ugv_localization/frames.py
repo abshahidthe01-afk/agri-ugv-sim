@@ -11,7 +11,8 @@ def spherical_coordinates(sdf_text):
     """
     Return (latitude, longitude, elevation, heading_deg) of a world's origin.
 
-    Worlds without <spherical_coordinates> get Gazebo's default (0, 0, 0, 0).
+    Worlds without <spherical_coordinates> get (0, 0, 0, 0). Gazebo's NavSat system then
+    reports 0, 0, 0 for every receiver, so a world used with GNSS needs them.
     """
     def value(tag, default):
         found = re.search(rf'<{tag}>([^<]+)</{tag}>', sdf_text)

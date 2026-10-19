@@ -64,6 +64,12 @@ def test_heading_noise_matches_the_own_noise_of_the_antennas():
     assert math.degrees(expected_yaw) == pytest.approx(0.2026, abs=1e-4)
 
 
+@pytest.mark.parametrize('baseline', [0.0, 0.3, math.nan])
+def test_heading_sigmas_refuse_antennas_at_one_point(baseline):
+    with pytest.raises(ValueError):
+        RtkErrors().heading_sigmas(baseline)
+
+
 def test_variance_adds_the_shared_and_own_errors():
     assert RtkErrors().variance() == pytest.approx([0.0001 + 0.000009] * 2 + [0.0004 + 0.000036])
 

@@ -35,6 +35,7 @@ class GaussMarkov:
 
 
 QUALITIES = ('fixed', 'float', 'none')
+MIN_BASELINE = 0.5     # m; the robot's antennas are 1.20 m apart
 
 
 class RtkErrors:
@@ -100,7 +101,15 @@ class RtkErrors:
         return self.common.sigma ** 2 + self.own_sigma ** 2
 
     def heading_sigmas(self, baseline):
-        """Return the standard deviations (rad) of yaw and pitch from two antennas."""
+        """
+        Return the standard deviations (rad) of yaw and pitch from two antennas.
+
+        baseline is the horizontal distance between the antennas [m]. Below MIN_BASELINE
+        the fixes are wrong (e.g. a world without <spherical_coordinates>): ValueError.
+        """
+        if not baseline >= MIN_BASELINE:
+            raise ValueError(f'the antennas are {baseline:.3f} m apart, less than '
+                             f'{MIN_BASELINE} m: their fixes are wrong')
         return (math.sqrt(2) * self.own_sigma[0] / baseline,
                 math.sqrt(2) * self.own_sigma[2] / baseline)
 

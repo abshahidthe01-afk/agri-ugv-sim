@@ -16,6 +16,19 @@
     <plugin filename="ignition-gazebo-scene-broadcaster-system"
             name="ignition::gazebo::systems::SceneBroadcaster"/>
 
+    <!-- A place on Earth for the GNSS antennas. Without <spherical_coordinates> Gazebo's NavSat
+         system reports latitude, longitude and altitude 0 for every antenna, so both antennas
+         seem to be at one point and the localization's heading breaks. Same place as
+         must_c_field; heading 0: world x points to true east. -->
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <world_frame_orientation>ENU</world_frame_orientation>
+      <latitude_deg>50.626127482</latitude_deg>
+      <longitude_deg>6.984883225</longitude_deg>
+      <elevation>221.845</elevation>
+      <heading_deg>0</heading_deg>
+    </spherical_coordinates>
+
     <light type="directional" name="sun">
       <cast_shadows>true</cast_shadows>
       <pose>0 0 10 0 0 0</pose>

@@ -58,6 +58,22 @@ def test_the_navsat_system_is_loaded_once():
     assert names.count('ignition-gazebo-navsat-system') == 1
 
 
+WORLDS = sorted((MODEL_FILE.parents[2] / 'agri_ugv_gazebo' / 'worlds').glob('*.sdf'))
+
+
+@pytest.mark.parametrize('world', WORLDS, ids=[w.stem for w in WORLDS])
+def test_every_world_puts_the_gnss_antennas_on_earth(world):
+    # without it Gazebo reports latitude, longitude and altitude 0 for both antennas
+    coordinates = ElementTree.parse(world).getroot().find('world/spherical_coordinates')
+    assert coordinates is not None
+    assert float(coordinates.findtext('latitude_deg')) == pytest.approx(50.626127482)
+    assert float(coordinates.findtext('longitude_deg')) == pytest.approx(6.984883225)
+
+
+def test_all_five_worlds_are_checked():
+    assert [w.stem for w in WORLDS] == ['flat', 'flat_mesh', 'must_c_field', 'ramp', 'waves']
+
+
 @pytest.mark.parametrize('quantity, white, bias, drift', [
     ('angular_velocity', 0.0005, 0.0003, 2e-5), ('linear_acceleration', 0.005, 0.01, 2e-4)])
 def test_imu_noise_and_biases_on_all_three_axes(quantity, white, bias, drift):

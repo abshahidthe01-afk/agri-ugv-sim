@@ -101,7 +101,12 @@ class GnssErrorsNode(Node):
         """Publish yaw (from true east) and pitch of the antenna line as an orientation."""
         yaw, pitch = heading_and_pitch(self.latest['rear'][1], self.latest['front'][1])
         east, north, _ = offset(self.latest['rear'][2], self.latest['front'][2])
-        sigma_yaw, sigma_pitch = self.errors.heading_sigmas((east ** 2 + north ** 2) ** 0.5)
+        try:
+            sigma_yaw, sigma_pitch = self.errors.heading_sigmas(math.hypot(east, north))
+        except ValueError as error:          # no heading rather than an infinite variance
+            self.get_logger().error(f'no heading: {error}. Does the world have '
+                                    '<spherical_coordinates>?', throttle_duration_sec=10.0)
+            return
         msg = Imu()
         msg.header.stamp = header.stamp
         msg.header.frame_id = 'base_link'
