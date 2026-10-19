@@ -9,6 +9,9 @@
 
   <!-- Path to the controller settings; empty = no ros2_control (e.g. RViz only) -->
   <xacro:arg name="controllers_file" default=""/>
+  <!-- A second controller settings file, for hardware mounted on the robot that has its own
+       ros2_control joints (e.g. an arm); empty = none (gazebo_control.xacro) -->
+  <xacro:arg name="extra_controllers_file" default=""/>
   <!-- Soil profile in Gazebo: rigid (default, no slip model), firm, soft or wet (soil.xacro) -->
   <xacro:arg name="soil" default="rigid"/>
   <!-- The 3D LiDAR on the roof (sensors.xacro); false leaves it out, e.g. to save rendering -->
@@ -292,7 +295,8 @@
   </xacro:if>
     <!-- ============ ros2_control (only when a controllers file is given) ============ -->
   <xacro:if value="${'$(arg controllers_file)' != ''}">
-    <xacro:gazebo_control controllers_file="$(arg controllers_file)"/>
+    <xacro:gazebo_control controllers_file="$(arg controllers_file)"
+                          extra_controllers_file="$(arg extra_controllers_file)"/>
     <xacro:if value="${'$(arg soil)' != 'rigid'}">
       <xacro:soil_model soil="$(arg soil)"/>
     </xacro:if>

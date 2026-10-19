@@ -19,7 +19,8 @@ def generate_launch_description():
     controllers = PathJoinSubstitution(
         [FindPackageShare('agri_ugv_control'), 'config', 'controllers.yaml'])
     robot_description = ParameterValue(
-        Command(['xacro ', model, ' controllers_file:=', controllers,
+        Command(['xacro ', LaunchConfiguration('model'), ' controllers_file:=', controllers,
+                 ' extra_controllers_file:=', LaunchConfiguration('extra_controllers'),
                  ' soil:=', LaunchConfiguration('soil'),
                  ' lidar:=', LaunchConfiguration('lidar'),
                  ' scanners:=', LaunchConfiguration('scanners'),
@@ -50,6 +51,16 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'world', default_value='flat',
             description='World name, e.g. flat or flat_mesh (loads worlds/<name>.sdf)'),
+        # The robot model; another xacro file can include this robot's model and mount extra
+        # hardware on it (e.g. an arm), with that hardware's controllers in a second file
+        DeclareLaunchArgument(
+            'model', default_value=model,
+            description='Robot model (xacro file); it gets the same arguments as '
+                        'agri_ugv.urdf.xacro'),
+        DeclareLaunchArgument(
+            'extra_controllers', default_value='',
+            description='A second controllers file for hardware mounted on the robot, run by '
+                        'the same controller manager; empty: none'),
         DeclareLaunchArgument(
             'soil', default_value='rigid',
             description='Soil profile: rigid (no slip model), firm, soft or wet'),

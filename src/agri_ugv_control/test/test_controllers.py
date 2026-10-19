@@ -20,6 +20,25 @@ def controllers():
         return yaml.safe_load(text)
 
 
+def plugin_parameter_files(**mappings):
+    """Return the parameter files the Gazebo ros2_control plugin is given."""
+    urdf = xacro.process_file(
+        str(MODEL_FILE), mappings={'controllers_file': 'a.yaml', **mappings}).toxml()
+    plugins = [plugin for plugin in ElementTree.fromstring(urdf).iter('plugin')
+               if plugin.get('filename') == 'gz_ros2_control-system']
+    assert len(plugins) == 1
+    return [element.text for element in plugins[0].findall('parameters')]
+
+
+def test_the_gazebo_plugin_gets_only_the_robots_controllers_by_default():
+    assert plugin_parameter_files() == ['a.yaml']
+    assert plugin_parameter_files(extra_controllers_file='') == ['a.yaml']
+
+
+def test_extra_controllers_run_in_the_same_controller_manager():
+    assert plugin_parameter_files(extra_controllers_file='b.yaml') == ['a.yaml', 'b.yaml']
+
+
 def test_the_cpp_controller_has_the_geometry_of_the_robot_model(controllers):
     modules, radius = geometry_from_urdf(
         xacro.process_file(str(MODEL_FILE), mappings={'controllers_file': 'x'}).toxml())

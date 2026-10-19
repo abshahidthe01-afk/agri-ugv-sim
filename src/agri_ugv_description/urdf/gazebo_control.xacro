@@ -29,7 +29,10 @@
     </joint>
   </xacro:macro>
 
-  <xacro:macro name="gazebo_control" params="controllers_file">
+  <!-- extra_controllers_file: settings of the controllers of hardware mounted on the robot
+       (e.g. an arm with its own ros2_control joints); empty: none. Both files go to the
+       same controller manager, so one /joint_states covers all joints. -->
+  <xacro:macro name="gazebo_control" params="controllers_file extra_controllers_file:=''">
     <ros2_control name="GazeboSimSystem" type="system">
       <hardware>
         <plugin>gz_ros2_control/GazeboSimSystem</plugin>
@@ -53,6 +56,9 @@
       <plugin filename="gz_ros2_control-system"
               name="gz_ros2_control::GazeboSimROS2ControlPlugin">
         <parameters>${controllers_file}</parameters>
+        <xacro:if value="${extra_controllers_file != ''}">
+          <parameters>${extra_controllers_file}</parameters>
+        </xacro:if>
       </plugin>
     </gazebo>
         <!-- Ground truth: Gazebo publishes the robot's true pose and velocity (no noise).
